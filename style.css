@@ -1,0 +1,149 @@
+:root{
+  --do-yellow: #f1d27b;
+  --do-yellow-border: #c9a64f;
+  --bg: #0b0b0b;
+  --muted: rgba(255,255,255,0.18);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--bg);
+  color:#fff;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.game-wrap{
+  display:flex;
+  gap:24px;
+  padding:18px;
+  align-items:flex-start;
+  justify-content:center;
+  min-height:100vh;
+}
+
+/* Sidebar prize columns */
+.sidebar{ width:210px; }
+.sidebar h3{ color:var(--do-yellow); margin:0 0 10px 0; font-size:18px; text-transform:uppercase; }
+.prize-col{ list-style:none; padding:0; margin:0; }
+.prize-col li{
+  background: linear-gradient(180deg,#f6df9d,var(--do-yellow));
+  color:#000;
+  border:2px solid var(--do-yellow-border);
+  padding:12px 10px;
+  margin:8px 0;
+  border-radius:6px;
+  font-weight:700;
+  font-size:16px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+}
+.prize-col li.greyed{
+  opacity:0.35;
+  filter: grayscale(1);
+}
+
+/* main area and board */
+.main-area{ width:860px; text-align:center; position:relative; }
+#title{ color:var(--do-yellow); margin:8px 0 12px; font-size:20px; }
+
+/* board grid */
+.board{
+  display:grid;
+  grid-template-columns: repeat(4, 150px);
+  gap:16px;
+  justify-content:center;
+  margin-bottom:16px;
+}
+
+/* case boxes */
+.case{
+  background: linear-gradient(180deg,#ffd97b,#f1d27b);
+  border:4px solid var(--do-yellow-border);
+  width:150px;
+  height:120px;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:30px;
+  font-weight:800;
+  color:#111;
+  cursor:pointer;
+  transition: transform .18s ease, opacity .2s ease;
+}
+.case.opened{
+  background: linear-gradient(180deg,#3b3b3b,#2b2b2b);
+  color:#fff;
+  border-color:#666;
+  cursor:default;
+}
+.case.greyed{ opacity:0.45; filter:grayscale(1); cursor:default; }
+
+/* player area */
+.player-section{ margin-top:10px; }
+.player-case{
+  width:220px;
+  height:150px;
+  margin:8px auto 0;
+  background: linear-gradient(180deg,#d7b86a,#b99643);
+  border:4px solid var(--do-yellow-border);
+  font-size:36px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#111;
+}
+
+/* Keep/Switch area (Phase 4) - NO wolfie overlay here per request */
+.keep-switch-area{ margin-top:18px; }
+.keep-switch-area .ks-buttons{ margin-top:10px; display:flex; gap:18px; justify-content:center; }
+.green{ background:#1e8b3a; color:#fff; padding:12px 24px; border-radius:8px; border:none; font-weight:800; font-size:18px; cursor:pointer; }
+.red{ background:#b71c1c; color:#fff; padding:12px 24px; border-radius:8px; border:none; font-weight:800; font-size:18px; cursor:pointer; }
+
+/* dealer overlay (wolfie) */
+.dealer-overlay{
+  position:fixed;
+  top:0; left:0; right:0; bottom:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:999;
+  background: rgba(0,0,0,0.55);
+}
+.dealer-overlay img{ max-width:90%; height:auto; display:block; pointer-events:none; }
+
+/* dealer box (positioned to sit in the black bottom part of the wolfie image) */
+.dealer-box{
+  position:absolute;
+  width:70%;
+  max-width:1100px;
+  bottom:18%;
+  left:50%;
+  transform:translateX(-50%);
+  text-align:center;
+  pointer-events:auto;
+}
+.offer-text{
+  background:#000;
+  color:var(--do-yellow);
+  font-weight:900;
+  font-size:36px;
+  padding:12px 20px;
+  border-radius:6px;
+  border:3px solid #222;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+}
+.dealer-buttons{ margin-top:14px; display:flex; gap:20px; justify-content:center; }
+.dealer-buttons button{
+  font-size:20px; padding:12px 28px; border-radius:8px; border:none; cursor:pointer; font-weight:800;
+}
+.deal-btn{ background:#1e8b3a; color:#fff; }
+.no-deal-btn{ background:#b71c1c; color:#fff; }
+
+/* small helpers */
+.hidden{ display:none; }
+#winText{ color:var(--do-yellow); font-size:32px; margin-top:14px; font-weight:900; }
+.controls{ margin-top:14px; }
+.controls button{ padding:8px 14px; border-radius:6px; border:none; background:#444; color:#fff; cursor:pointer; }
