@@ -15,7 +15,7 @@ const CASE_HEIGHT = 120;  // px
 
 // APNG scale factor: you said the APNG artwork is about 50% the size of cases,
 // so we display it at 2x to line up visually.
-const ANIM_SCALE = 1.5;
+const ANIM_SCALE = 1.25;
 
 // APNG timing: 1 second + 2 frames (use FRAME_RATE corresponding to the original animation)
 const FRAME_RATE = 24;
