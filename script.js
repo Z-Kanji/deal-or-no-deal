@@ -15,11 +15,11 @@ const CASE_HEIGHT = 120;  // px
 
 // APNG scale factor: you said the APNG artwork is about 50% the size of cases,
 // so we display it at 2x to line up visually.
-const ANIM_SCALE = 1.35;
+const ANIM_SCALE = 1.45;
 
 // APNG timing: 1 second + 2 frames (use FRAME_RATE corresponding to the original animation)
 const FRAME_RATE = 24;
-const ANIM_DURATION_MS = 1000 + Math.round(1.05 * (1000 / FRAME_RATE)); // ~1083 ms for 24fps
+const ANIM_DURATION_MS = 1000 + Math.round(0.5 * (1000 / FRAME_RATE)); // ~1083 ms for 24fps
 
 // Dealer minimum delay from click -> wolfie overlay (shortened from 4s to 3s)
 const MIN_DEALER_DELAY_MS = 3000; // 3000ms = 3s
