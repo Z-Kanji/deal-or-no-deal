@@ -34,20 +34,18 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
 .board{ display:grid; grid-template-columns: repeat(4, 150px); gap:16px; justify-content:center; margin-bottom:16px; }
 
 /* case container */
-.case-wrap{ position:relative; width:150px; height:120px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.case-img{ width:150px; height:120px; background-size:cover; background-position:center; border-radius:6px; border:3px solid var(--do-yellow-border); display:block; }
-.case-number{
-  position:absolute; top:6px; left:50%; transform:translateX(-50%); font-weight:900; color:#111; font-size:20px;
-  background: rgba(255,255,255,0.85); padding:4px 8px; border-radius:6px;
-  pointer-events:none;
-}
+.case-wrap, .player-case{ position:relative; width:150px; height:120px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.case-img{ width:150px; height:120px; background-size:cover; background-position:center; border-radius:6px; border:3px solid var(--do-yellow-border); display:flex; align-items:center; justify-content:center; }
+.case-number{ position:absolute; font-weight:900; color:#111; font-size:24px; pointer-events:none; text-align:center; width:100%; }
+
+/* opened case */
 .case-open .case-img{ border-color:#444; }
 .case-grey .case-img{ filter:grayscale(1); opacity:0.45; }
 
 /* prize label inside opened briefcase */
 .prize-label{
   position:absolute;
-  width:84%;
+  width:90%;
   left:50%;
   top:40%;
   transform:translateX(-50%);
@@ -55,13 +53,13 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
   font-weight:800;
   color:#111;
   font-size:14px;
-  padding:6px;
+  padding:4px;
+  word-wrap: break-word;
   pointer-events:none;
 }
 
 /* player area */
 .player-section{ margin-top:10px; }
-.player-case{ width:220px; height:150px; margin:8px auto 0; background: linear-gradient(180deg,#d7b86a,#b99643); border:4px solid var(--do-yellow-border); font-size:36px; display:flex; align-items:center; justify-content:center; color:#111; }
 
 /* Keep/Switch area */
 .keep-switch-area{ margin-top:18px; }
@@ -85,10 +83,5 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
 .controls{ margin-top:14px; }
 .controls button{ padding:8px 14px; border-radius:6px; border:none; background:#444; color:#fff; cursor:pointer; }
 
-/* video overlay styling */
-#caseAnim{
-  position:absolute;
-  z-index:1500;
-  pointer-events:none;
-  object-fit:cover; /* ensure it covers the case properly */
-}
+/* animation overlay */
+#caseAnim{ position:absolute; z-index:1500; pointer-events:none; width:150px; height:120px; }
