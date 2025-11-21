@@ -59,6 +59,23 @@
     </div>
   </div>
 
+  <!-- Win overlay (wolfie + open case + prize + YOU WIN text) -->
+  <div id="winOverlay" class="dealer-overlay hidden" aria-hidden="true">
+    <img id="winWolfie" src="" alt="Dealer" />
+    <div class="dealer-box" role="dialog" aria-modal="true">
+      <div class="win-panel">
+        <div class="win-title">YOU WIN!</div>
+        <div class="win-case">
+          <div class="win-case-img"></div>
+          <div class="win-prize-text"></div>
+        </div>
+      </div>
+      <div class="win-buttons" style="margin-top:14px;">
+        <button id="winOkBtn" class="deal-btn">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- APNG animation overlay (positioned dynamically) -->
   <img id="caseAnim" class="hidden" alt="Case Animation" />
 
