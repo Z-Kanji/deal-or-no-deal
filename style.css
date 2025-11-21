@@ -33,33 +33,53 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
 /* board grid */
 .board{ display:grid; grid-template-columns: repeat(4, 150px); gap:16px; justify-content:center; margin-bottom:16px; }
 
-/* case container */
-.case-wrap, .player-case{ position:relative; width:150px; height:120px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.case-img{ width:150px; height:120px; background-size:cover; background-position:center; border-radius:6px; border:3px solid var(--do-yellow-border); display:flex; align-items:center; justify-content:center; }
-.case-number{ position:absolute; font-weight:900; color:#111; font-size:24px; pointer-events:none; text-align:center; width:100%; }
+/* case container (board cases) */
+.case-wrap{ position:relative; width:150px; height:120px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.case-wrap .case-img{ width:150px; height:120px; background-size:cover; background-position:center; border-radius:6px; border:3px solid var(--do-yellow-border); display:flex; align-items:center; justify-content:center; }
 
-/* opened case */
+/* player case (centered under "Your Case" heading) */
+.player-section{ margin-top:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.player-section h2{ margin:0 0 8px 0; text-align:center; color:var(--do-yellow); font-size:18px; }
+.player-case{ position:relative; width:220px; height:150px; display:flex; align-items:center; justify-content:center; cursor:default; }
+.player-case .case-img{ width:100%; height:100%; background-size:cover; background-position:center; border-radius:6px; border:4px solid var(--do-yellow-border); display:flex; align-items:center; justify-content:center; }
+
+/* numbers centered both on board cases and player case */
+.case-number{
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  font-weight:900;
+  color:#111;
+  font-size:22px;
+  pointer-events:none;
+  text-align:center;
+  background: rgba(255,255,255,0.0); /* transparent to remove yellow box */
+  padding:0 6px;
+  line-height:1;
+}
+
+/* opened case and greyed style */
 .case-open .case-img{ border-color:#444; }
 .case-grey .case-img{ filter:grayscale(1); opacity:0.45; }
 
 /* prize label inside opened briefcase */
 .prize-label{
   position:absolute;
-  width:90%;
+  width:88%;
   left:50%;
   top:40%;
   transform:translateX(-50%);
   text-align:center;
   font-weight:800;
   color:#111;
-  font-size:14px;
-  padding:4px;
-  word-wrap: break-word;
+  font-size:13px;
+  padding:6px 4px;
+  word-wrap:break-word;
+  white-space:normal;
   pointer-events:none;
+  line-height:1.05;
 }
-
-/* player area */
-.player-section{ margin-top:10px; }
 
 /* Keep/Switch area */
 .keep-switch-area{ margin-top:18px; }
@@ -83,5 +103,12 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
 .controls{ margin-top:14px; }
 .controls button{ padding:8px 14px; border-radius:6px; border:none; background:#444; color:#fff; cursor:pointer; }
 
-/* animation overlay */
-#caseAnim{ position:absolute; z-index:1500; pointer-events:none; width:150px; height:120px; }
+/* APNG overlay - matches each case size when shown */
+#caseAnim{
+  position:absolute;
+  z-index:1500;
+  pointer-events:none;
+  width:150px;
+  height:120px;
+  image-rendering: auto;
+}
