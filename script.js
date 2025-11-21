@@ -15,17 +15,17 @@ const CASE_HEIGHT = 120;  // px
 
 // APNG scale factor: you said the APNG artwork is about 50% the size of cases,
 // so we display it at 2x to line up visually.
-const ANIM_SCALE = 1.25;
+const ANIM_SCALE = 1.15;
 
 // APNG timing: 1 second + 2 frames (use FRAME_RATE corresponding to the original animation)
 const FRAME_RATE = 24;
-const ANIM_DURATION_MS = 1000 + Math.round(2 * (1000 / FRAME_RATE)); // ~1083 ms for 24fps
+const ANIM_DURATION_MS = 1000 + Math.round(1.3 * (1000 / FRAME_RATE)); // ~1083 ms for 24fps
 
 // Dealer minimum delay from click -> wolfie overlay (shortened from 4s to 3s)
 const MIN_DEALER_DELAY_MS = 3000; // 3000ms = 3s
 
 // Win overlay delay after final reveal
-const WIN_OVERLAY_DELAY_MS = 2000; // 2s
+const WIN_OVERLAY_DELAY_MS = 1750; // 2s
 
 /* ---------- ASSETS ---------- */
 const assets = {
@@ -51,7 +51,7 @@ const prizeListOrdered = [
   "JBL Go 4",
   "Ninja Creami"
 ];
-const DEALER_ALLOWED = ["t-shirt","signed poster","luigi","women","womens"];
+const DEALER_ALLOWED = ["t-shirt","signed poster","luigi","womens"];
 
 /* ---------- STATE ---------- */
 let casePrizes = [];
