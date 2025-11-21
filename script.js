@@ -1,30 +1,36 @@
 /* script.js
-   - APNG plays once (exact duration = 1s + 2 frames at FRAME_RATE)
-   - animation, closed and open images are same size (CASE_WIDTH x CASE_HEIGHT)
-   - dealer_call plays only when wolfie overlay appears
-   - minimum 4000ms delay from click -> wolfie overlay
-   - winning SFX (for final keep/switch reveal) is cued at animation start
-   - dealer offers restricted and second dealer call offers the middle prize
+   - APNG overlay is displayed at a scaled size (ANIM_SCALE) to match the case artwork.
+   - Dealer delay shortened to 3 seconds (MIN_DEALER_DELAY_MS).
+   - Animation duration computed as 1s + 2 frames (FRAME_RATE).
+   - Dealer offers exclude highest; second dealer call offers middle prize.
+   - Win SFX is cued at animation start for final reveal.
+   - Win overlay (wolfie + open case + prize + YOU WIN) shows 2s after final reveal.
+   - Background music stops when win overlay displayed.
 */
 
-// ---------- CONFIG: sizes & timing ----------
-const CASE_WIDTH = 150;   // px — must match CSS --case-width
-const CASE_HEIGHT = 120;  // px — must match CSS --case-height
+/* ---------- CONFIG: sizing & timing ---------- */
+// CASE size must match CSS --case-width / --case-height
+const CASE_WIDTH = 150;   // px
+const CASE_HEIGHT = 120;  // px
 
-const FRAME_RATE = 24; // adjust if your APNG frames use different FPS
-// Animation = 1 second + 2 frames
-const ANIM_DURATION_MS = 1000 + Math.round(2 * (1000 / FRAME_RATE)); // 1s + 2 frames at FRAME_RATE
+// APNG scale factor: you said the APNG artwork is about 50% the size of cases,
+// so we display it at 2x to line up visually.
+const ANIM_SCALE = 2.0;
 
-// Minimum delay from case clicked to dealer overlay appearing (ms)
-const MIN_DEALER_DELAY_MS = 4000;
+// APNG timing: 1 second + 2 frames (use FRAME_RATE corresponding to the original animation)
+const FRAME_RATE = 24;
+const ANIM_DURATION_MS = 1000 + Math.round(2 * (1000 / FRAME_RATE)); // ~1083 ms for 24fps
 
-// Dealer overlay additional read delay (if you want extra beyond MIN_DEALER_DELAY_MS)
-const DEALER_EXTRA_DELAY_MS = 0; // set >0 if you want more delay
+// Dealer minimum delay from click -> wolfie overlay (shortened from 4s to 3s)
+const MIN_DEALER_DELAY_MS = 3000; // 3000ms = 3s
 
-// ---------- ASSETS ----------
+// Win overlay delay after final reveal
+const WIN_OVERLAY_DELAY_MS = 2000; // 2s
+
+/* ---------- ASSETS ---------- */
 const assets = {
   closedCaseImg: 'closed_briefcase.png',
-  animImg: 'case_animation.png', // APNG (root)
+  animImg: 'case_animation.png', // APNG in repo root
   openCaseImg: 'open_briefcase.png',
   wolfieImg: 'wolfie_dealer.png',
   bgMusic: 'theme_song.mp3',
@@ -34,7 +40,7 @@ const assets = {
   smallPrizeSfx: 'small_prize.mp3'
 };
 
-// ---------- GAME DATA ----------
+/* ---------- GAME DATA ---------- */
 const prizeListOrdered = [
   ".01",
   "Sticker",
@@ -45,11 +51,9 @@ const prizeListOrdered = [
   "JBL Go 4",
   "Ninja Creami"
 ];
-
-// Allowed dealer offers (first callers and general)
 const DEALER_ALLOWED = ["t-shirt","signed poster","luigi","women","womens"];
 
-// ---------- STATE ----------
+/* ---------- STATE ---------- */
 let casePrizes = [];
 let playerCaseIndex = null;
 let originalPlayerIndex = null;
@@ -58,19 +62,22 @@ let picksNeeded = 0;
 let revealedSet = new Set();
 let overlayVisible = false;
 let bgStarted = false;
-let dealerCallCount = 0; // counts how many times dealer offered
-
-// track click timestamp for enforcing MIN_DEALER_DELAY_MS
+let dealerCallCount = 0;
 let lastRevealClickStart = 0;
 
-// ---------- AUDIO ----------
-const bgAudio = new Audio(assets.bgMusic); bgAudio.loop = true; bgAudio.volume = 0.5;
-const dealerAudio = new Audio(assets.dealerCall); dealerAudio.volume = 0.95;
+/* ---------- AUDIO ---------- */
+const bgAudio = new Audio(assets.bgMusic);
+bgAudio.loop = true;
+bgAudio.volume = 0.5;
+
+const dealerAudio = new Audio(assets.dealerCall);
+dealerAudio.volume = 0.95;
+
 const biggestAudio = new Audio(assets.biggestPrizeSfx);
 const mediumAudio = new Audio(assets.mediumPrizeSfx);
 const smallAudio = new Audio(assets.smallPrizeSfx);
 
-// ---------- DOM ----------
+/* ---------- DOM ---------- */
 const prizeLeftEl = document.getElementById('prizeLeft');
 const prizeRightEl = document.getElementById('prizeRight');
 const boardEl = document.getElementById('board');
@@ -78,27 +85,42 @@ const playerCaseEl = document.getElementById('playerCase');
 const playerCaseImgEl = playerCaseEl.querySelector('.case-img');
 const playerCaseNumberEl = playerCaseEl.querySelector('.case-number');
 const titleEl = document.getElementById('title');
+
 const dealerOverlay = document.getElementById('dealerOverlay');
 const wolfieImgEl = document.getElementById('wolfieImg');
 const offerText = document.getElementById('offerText');
 const dealerButtons = document.getElementById('dealerButtons');
 const dealBtn = document.getElementById('dealBtn');
 const noDealBtn = document.getElementById('noDealBtn');
+
+const winOverlay = document.getElementById('winOverlay');
+const winWolfie = document.getElementById('winWolfie');
+const winCaseImg = document.querySelector('#winOverlay .win-case-img');
+const winPrizeText = document.querySelector('#winOverlay .win-prize-text');
+const winOkBtn = document.getElementById('winOkBtn');
+
 const keepSwitchArea = document.getElementById('keepSwitchArea');
 const keepBtn = document.getElementById('keepBtn');
 const switchBtn = document.getElementById('switchBtn');
+
 const winText = document.getElementById('winText');
 const resetBtn = document.getElementById('resetBtn');
+
 const caseAnimImg = document.getElementById('caseAnim');
 
 wolfieImgEl.src = assets.wolfieImg;
+winWolfie.src = assets.wolfieImg;
 
-// ---------- UTIL ----------
+/* ---------- UTIL ---------- */
 function shuffle(a){ const arr=a.slice(); for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
-// ---------- UI BUILD ----------
+/* ---------- UI BUILD ---------- */
 function buildUI(){
+  // sync CSS variables with JS constants so CSS and JS sizes match
+  document.documentElement.style.setProperty('--case-width', CASE_WIDTH + 'px');
+  document.documentElement.style.setProperty('--case-height', CASE_HEIGHT + 'px');
+
   prizeLeftEl.innerHTML = '';
   prizeRightEl.innerHTML = '';
   prizeListOrdered.slice(0,4).forEach((p,i)=>{
@@ -129,7 +151,6 @@ function buildUI(){
       if (overlayVisible) return;
       if (revealedSet.has(i)) return;
       if (playerCaseIndex !== null && i === playerCaseIndex) return;
-      // record click time for MIN_DEALER_DELAY_MS enforcement
       lastRevealClickStart = Date.now();
       await onCaseClicked(i);
     });
@@ -137,12 +158,11 @@ function buildUI(){
     boardEl.appendChild(wrap);
   }
 
-  // player-case initial
   playerCaseImgEl.style.backgroundImage = `url(${assets.closedCaseImg})`;
   playerCaseNumberEl.textContent = '?';
 }
 
-// update pointer interactivity
+/* ---------- INTERACTIVITY ---------- */
 function updateBoardInteractivity(){
   document.querySelectorAll('.case-wrap').forEach((wrap,i)=>{
     if (overlayVisible){ wrap.style.pointerEvents = 'none'; return; }
@@ -154,7 +174,7 @@ function updateBoardInteractivity(){
   });
 }
 
-// ---------- GAME INIT ----------
+/* ---------- GAME INIT ---------- */
 function initGame(){
   casePrizes = shuffle(prizeListOrdered);
   playerCaseIndex = null;
@@ -167,7 +187,7 @@ function initGame(){
   dealerCallCount = 0;
   lastRevealClickStart = 0;
 
-  document.querySelectorAll('.case-wrap').forEach((wrap)=>{
+  document.querySelectorAll('.case-wrap').forEach(wrap=>{
     wrap.classList.remove('case-open','case-grey');
     const img = wrap.querySelector('.case-img');
     img.style.backgroundImage = `url(${assets.closedCaseImg})`;
@@ -184,13 +204,14 @@ function initGame(){
   offerText.textContent = 'OFFER: --';
   keepSwitchArea.classList.add('hidden');
   dealerOverlay.classList.add('hidden');
+  winOverlay.classList.add('hidden');
   winText.classList.add('hidden');
-  titleEl.textContent = 'Choose your personal case';
 
+  titleEl.textContent = 'Choose your personal case';
   updateBoardInteractivity();
 }
 
-// ---------- BACKGROUND SFX ----------
+/* ---------- BG AUDIO ---------- */
 function ensureBackgroundStarted(){
   if (bgStarted) return;
   bgStarted = true;
@@ -198,7 +219,7 @@ function ensureBackgroundStarted(){
   bgAudio.play().catch(()=>{});
 }
 
-// ---------- CLICK HANDLER ----------
+/* ---------- click handler ---------- */
 async function onCaseClicked(index){
   if (overlayVisible) return;
   ensureBackgroundStarted();
@@ -226,9 +247,8 @@ async function onCaseClicked(index){
     overlayVisible = true;
     updateBoardInteractivity();
 
-    // Reveal: play APNG once, switch to open image.
-    // For final reveals that should cue winning SFX, caller will pass a flag.
-    await revealCaseWithAnimation(index);
+    // Reveal APNG once, swap to open image
+    await revealCaseWithAnimation(index, { cueWin: false });
 
     picksNeeded--;
     overlayVisible = false;
@@ -237,14 +257,12 @@ async function onCaseClicked(index){
       titleEl.textContent = `Pick ${picksNeeded} more case(s)`;
       updateBoardInteractivity();
     } else {
-      // AFTER the reveal finished we must ensure a **minimum 4s delay from initial click**
-      // lastRevealClickStart was set when the user clicked the case.
+      // Guarantee at least MIN_DEALER_DELAY_MS from click -> dealer overlay
       const elapsed = Date.now() - lastRevealClickStart;
       const remaining = MIN_DEALER_DELAY_MS - elapsed;
-      if (remaining > 0) await sleep(remaining + DEALER_EXTRA_DELAY_MS);
+      if (remaining > 0) await sleep(remaining);
 
       if (phase === 1 || phase === 2){
-        // increment dealer call count and show dealer offer (dealerCallCount used in computeDealerOffer)
         dealerCallCount++;
         showDealerOffer();
       } else if (phase === 3){
@@ -255,7 +273,7 @@ async function onCaseClicked(index){
   }
 }
 
-// ---------- REVEAL: APNG plays once then open image ----------
+/* ---------- reveal: APNG plays once then open image ---------- */
 async function revealCaseWithAnimation(index, options = { cueWin: false }){
   if (revealedSet.has(index)) return;
   revealedSet.add(index);
@@ -264,40 +282,44 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   const img = wrap.querySelector('.case-img');
   const num = wrap.querySelector('.case-number');
 
-  // hide board number
   if (num) num.style.display = 'none';
 
-  // position APNG overlay exactly over the case
+  // position overlay centered on case; scale overlay by ANIM_SCALE
   const rect = img.getBoundingClientRect();
-  caseAnimImg.style.width = `${CASE_WIDTH}px`;
-  caseAnimImg.style.height = `${CASE_HEIGHT}px`;
-  caseAnimImg.style.left = `${rect.left + window.scrollX}px`;
-  caseAnimImg.style.top  = `${rect.top + window.scrollY}px`;
+  const overlayWidth = Math.round(CASE_WIDTH * ANIM_SCALE);
+  const overlayHeight = Math.round(CASE_HEIGHT * ANIM_SCALE);
+  const left = rect.left + window.scrollX + Math.round((rect.width - overlayWidth) / 2);
+  const top = rect.top + window.scrollY + Math.round((rect.height - overlayHeight) / 2);
 
-  // cache-bust to force play from first frame (then clear src)
+  caseAnimImg.style.width = overlayWidth + 'px';
+  caseAnimImg.style.height = overlayHeight + 'px';
+  caseAnimImg.style.left = left + 'px';
+  caseAnimImg.style.top = top + 'px';
+  caseAnimImg.style.objectFit = 'contain';
+
+  // restart APNG by cache-busting the src and show it
   caseAnimImg.src = assets.animImg + '?_=' + Date.now();
   caseAnimImg.classList.remove('hidden');
 
-  // If this reveal should cue a win SFX (final keep/switch reveal), play it now
+  // If this reveal should cue win SFX, play now (so it happens during animation)
   if (options.cueWin){
-    // determine prize and play appropriate sfx immediately as animation starts
     const prize = casePrizes[index];
     playWinSfxForPrize(prize);
   }
 
-  // Wait exactly the animation duration (1s + 2 frames at FRAME_RATE)
+  // Wait exactly ANIM_DURATION_MS
   await sleep(ANIM_DURATION_MS);
 
-  // hide APNG overlay and clear src so it will not loop or replay
+  // hide APNG overlay and clear src so it won't loop/replay
   caseAnimImg.classList.add('hidden');
   caseAnimImg.src = '';
 
-  // swap to open briefcase image (same size)
+  // swap to open_briefcase.png (same size) and show prize label
   img.style.backgroundImage = `url(${assets.openCaseImg})`;
   wrap.classList.add('case-open');
   img.style.pointerEvents = 'none';
 
-  // add & center prize label inside the white box
+  // prize label centered
   let prizeLabel = wrap.querySelector('.prize-label');
   if (!prizeLabel){
     prizeLabel = document.createElement('div');
@@ -306,52 +328,47 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   }
   prizeLabel.textContent = casePrizes[index];
 
-  // grey out prize on sidebar
+  // grey out sidebar
   const pIdx = prizeListOrdered.findIndex(p => casePrizes[index] === p);
   if (pIdx >= 0){ const li=document.getElementById('prize-'+pIdx); if (li) li.classList.add('greyed'); }
-
-  // DO NOT play dealerCall here — dealerCall audio plays only when dealer overlay is shown
 }
 
-// ---------- DEALER OFFER LOGIC ----------
+/* ---------- dealer offer calculation ---------- */
 function computeDealerOffer(){
-  // Gather remaining prizes (excluding player's case and already revealed)
+  // collect remaining prizes
   const remaining = [];
   for (let i=0;i<8;i++){
     if (i === playerCaseIndex) continue;
     if (revealedSet.has(i)) continue;
     remaining.push({p: casePrizes[i], idx: prizeListOrdered.indexOf(casePrizes[i])});
   }
-  // sort by prize index (lowest to highest)
   remaining.sort((a,b)=>a.idx - b.idx);
   if (remaining.length === 0) return "No Offer";
 
-  // Helper: filter allowed (case-insensitive)
-  const allowedRemaining = remaining.filter(r => {
+  // highest prize index (cannot be offered)
+  const highestIdx = Math.max(...remaining.map(r=>r.idx));
+  const nonHighest = remaining.filter(r => r.idx !== highestIdx);
+
+  // second dealer call: offer the middle prize among remaining (non-highest if possible)
+  if (dealerCallCount === 2){
+    const arr = nonHighest.length ? nonHighest : remaining;
+    const mid = Math.floor((arr.length - 1) / 2);
+    return arr[mid].p;
+  }
+
+  // normal dealer calls: pick from allowed set excluding highest
+  const allowedRemaining = nonHighest.filter(r => {
     const key = r.p.toLowerCase();
     return DEALER_ALLOWED.some(a => key.includes(a.toLowerCase()));
   });
 
-  // If this is the second dealer call, offer the middle prize among remaining
-  if (dealerCallCount === 2){
-    const midIndex = Math.floor((remaining.length - 1) / 2); // e.g. if 3 items -> 1 (middle)
-    return remaining[midIndex].p;
-  }
+  let candidates = allowedRemaining.length ? allowedRemaining : (nonHighest.length ? nonHighest : remaining);
 
-  // On other dealer calls, pick a random allowedRemaining if available
-  if (allowedRemaining.length > 0){
-    const pick = allowedRemaining[Math.floor(Math.random() * allowedRemaining.length)];
-    return pick.p;
-  }
-
-  // Fallback: pick any remaining prize that is not ".01"
-  const nonPenny = remaining.find(r => r.p !== ".01");
-  if (nonPenny) return nonPenny.p;
-
-  // As last fallback, allow any remaining prize
-  return remaining[0].p;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  return pick.p;
 }
 
+/* ---------- show dealer overlay ---------- */
 function showDealerOffer(){
   overlayVisible = true;
   updateBoardInteractivity();
@@ -359,14 +376,13 @@ function showDealerOffer(){
   const offer = computeDealerOffer();
   offerText.textContent = 'OFFER: ' + offer;
 
-  // Play dealer SFX only when dealer overlay appears
+  // play dealerCall SFX only when overlay appears
   dealerAudio.currentTime = 0;
   dealerAudio.play().catch(()=>{});
 
   dealerOverlay.classList.remove('hidden');
   dealerButtons.classList.remove('hidden');
 
-  // Block board clicks
   document.querySelectorAll('.case-wrap').forEach(w => w.style.pointerEvents = 'none');
 
   dealBtn.onclick = async () => {
@@ -374,8 +390,13 @@ function showDealerOffer(){
     dealerOverlay.classList.add('hidden');
     overlayVisible = false;
     updateBoardInteractivity();
-    // Reveal player's case (if not revealed) and show result
+
+    // reveal player's case (cue win SFX)
     await revealPlayerCaseForDeal(offer);
+
+    // after final reveal, wait WIN_OVERLAY_DELAY_MS then show win overlay
+    await sleep(WIN_OVERLAY_DELAY_MS);
+    showWinOverlay(offer);
   };
 
   noDealBtn.onclick = () => {
@@ -388,21 +409,62 @@ function showDealerOffer(){
   };
 }
 
-// reveal player's case when deal accepted
 async function revealPlayerCaseForDeal(offer){
   if (!revealedSet.has(playerCaseIndex)){
-    // when revealing player's case here, cue the win SFX at animation start
     await revealCaseWithAnimation(playerCaseIndex, { cueWin: true });
   }
-  // set player's displayed image to open
   playerCaseImgEl.style.backgroundImage = `url(${assets.openCaseImg})`;
   winText.classList.remove('hidden');
   winText.textContent = 'DEAL ACCEPTED: ' + offer;
   document.querySelectorAll('.case-wrap').forEach(w=> w.style.pointerEvents = 'none');
-  // SFX already played at animation start via cueWin
+  // SFX already played at reveal start (cueWin)
 }
 
-// show keep/switch UI
+/* ---------- win overlay ---------- */
+function showWinOverlay(prize){
+  // fade out and stop background music
+  try {
+    const fadeMs = 400;
+    const steps = 8;
+    const stepMs = Math.round(fadeMs / steps);
+    let curStep = 0;
+    const initialVol = bgAudio.volume;
+    const fadeInterval = setInterval(()=>{
+      curStep++;
+      const v = Math.max(0, initialVol * (1 - curStep/steps));
+      bgAudio.volume = v;
+      if (curStep >= steps){
+        clearInterval(fadeInterval);
+        bgAudio.pause();
+        bgAudio.currentTime = 0;
+        bgAudio.volume = initialVol;
+      }
+    }, stepMs);
+  } catch(e){
+    try { bgAudio.pause(); bgAudio.currentTime = 0; } catch(_){}
+  }
+
+  winCaseImg.style.backgroundImage = `url(${assets.openCaseImg})`;
+  winPrizeText.textContent = prize;
+  winOverlay.classList.remove('hidden');
+
+  // play an appropriate flourish SFX (this is separate from the cue played at animation start)
+  const p = (''+prize).toLowerCase();
+  if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
+  else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
+  else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
+
+  overlayVisible = true;
+  updateBoardInteractivity();
+}
+
+winOkBtn.onclick = () => {
+  winOverlay.classList.add('hidden');
+  overlayVisible = false;
+  updateBoardInteractivity();
+};
+
+/* ---------- keep/switch flows ---------- */
 function showKeepSwitchUI(){
   keepSwitchArea.classList.remove('hidden');
   document.querySelectorAll('.case-wrap').forEach(w => w.style.pointerEvents = 'none');
@@ -410,14 +472,26 @@ function showKeepSwitchUI(){
   keepBtn.onclick = async () => {
     keepSwitchArea.classList.add('hidden');
     await finalRevealSequence(false);
+    await sleep(WIN_OVERLAY_DELAY_MS);
+    const finalPrize = getFinalPrizeForDisplay();
+    showWinOverlay(finalPrize);
   };
   switchBtn.onclick = async () => {
     keepSwitchArea.classList.add('hidden');
     await finalRevealSequence(true);
+    await sleep(WIN_OVERLAY_DELAY_MS);
+    const finalPrize = getFinalPrizeForDisplay();
+    showWinOverlay(finalPrize);
   };
 }
 
-// final reveal sequence (handles switch)
+function getFinalPrizeForDisplay(){
+  // best-effort: find prize of player's final index if available
+  const idx = playerCaseIndex !== null ? playerCaseIndex : originalPlayerIndex;
+  return casePrizes[idx];
+}
+
+/* ---------- final reveal ---------- */
 async function finalRevealSequence(switched){
   const remainingUnopened = [...Array(8).keys()].filter(i => i !== originalPlayerIndex && !revealedSet.has(i));
   const remainingIndex = remainingUnopened.length ? remainingUnopened[0] : null;
@@ -436,12 +510,10 @@ async function finalRevealSequence(switched){
   const otherIndex = (originalPlayerIndex === finalPlayerIndex) ? remainingIndex : originalPlayerIndex;
 
   if (otherIndex !== null && !revealedSet.has(otherIndex)){
-    // reveal other (non-final) case normally (no win cue)
     await revealCaseWithAnimation(otherIndex);
     await sleep(ANIM_DURATION_MS + 200);
   }
 
-  // reveal final player's case and cue win SFX when animation starts
   if (!revealedSet.has(finalPlayerIndex)){
     await revealCaseWithAnimation(finalPlayerIndex, { cueWin: true });
     await sleep(ANIM_DURATION_MS);
@@ -450,11 +522,10 @@ async function finalRevealSequence(switched){
   const finalPrize = casePrizes[finalPlayerIndex];
   winText.classList.remove('hidden');
   winText.textContent = 'YOU WIN: ' + finalPrize;
-  // ensure all board clicks disabled now
   document.querySelectorAll('.case-wrap').forEach(w=> w.style.pointerEvents = 'none');
 }
 
-// play final SFX based on prize
+/* ---------- sfx mapping ---------- */
 function playWinSfxForPrize(prize){
   const p = (prize || '').toLowerCase();
   if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); return; }
@@ -463,9 +534,8 @@ function playWinSfxForPrize(prize){
   smallAudio.currentTime = 0; smallAudio.play().catch(()=>{});
 }
 
-// reset handler
+/* ---------- reset & start ---------- */
 resetBtn.addEventListener('click', () => initGame());
 
-// build & start
 buildUI();
 initGame();
