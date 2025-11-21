@@ -15,7 +15,6 @@
 
     <div class="main-area">
       <h1 id="title">Choose your personal case</h1>
-
       <div id="board" class="board" aria-live="polite"></div>
 
       <div class="player-section">
@@ -44,9 +43,9 @@
     </div>
   </div>
 
-  <!-- Dealer overlay (wolfie) — shown only during dealer offers (phase 1 & 2) -->
+  <!-- Dealer overlay -->
   <div id="dealerOverlay" class="dealer-overlay hidden" aria-hidden="true">
-    <img id="wolfieImg" src="wolfie_dealer.png" alt="Dealer" />
+    <img id="wolfieImg" src="" alt="Dealer" />
     <div class="dealer-box" role="dialog" aria-modal="true">
       <div id="offerText" class="offer-text">OFFER: --</div>
       <div id="dealerButtons" class="dealer-buttons">
@@ -56,10 +55,9 @@
     </div>
   </div>
 
-  <!-- Hidden video element used to play the case animation overlay -->
+  <!-- Video overlay -->
   <video id="caseAnim" class="hidden" preload="auto" playsinline></video>
 
-  <!-- Script -->
   <script src="script.js"></script>
 </body>
 </html>
