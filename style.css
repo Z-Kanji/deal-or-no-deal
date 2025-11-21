@@ -63,7 +63,7 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
 .player-section{ margin-top:10px; }
 .player-case{ width:220px; height:150px; margin:8px auto 0; background: linear-gradient(180deg,#d7b86a,#b99643); border:4px solid var(--do-yellow-border); font-size:36px; display:flex; align-items:center; justify-content:center; color:#111; }
 
-/* Keep/Switch area (Phase 4) - NO wolfie overlay here per request */
+/* Keep/Switch area */
 .keep-switch-area{ margin-top:18px; }
 .ks-buttons{ margin-top:10px; display:flex; gap:18px; justify-content:center; }
 .green{ background:#1e8b3a; color:#fff; padding:12px 24px; border-radius:8px; border:none; font-weight:800; font-size:18px; cursor:pointer; }
@@ -85,5 +85,10 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
 .controls{ margin-top:14px; }
 .controls button{ padding:8px 14px; border-radius:6px; border:none; background:#444; color:#fff; cursor:pointer; }
 
-/* video overlay styling (absolute) */
-#caseAnim{ position:absolute; z-index:1500; pointer-events:none; }
+/* video overlay styling */
+#caseAnim{
+  position:absolute;
+  z-index:1500;
+  pointer-events:none;
+  object-fit:cover; /* ensure it covers the case properly */
+}
