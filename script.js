@@ -1,8 +1,9 @@
-/* script.js — centered player-case, clickable board cases, APNG overlay -> open_briefcase */
+/* script.js — final: APNG plays once, then open image; dealer overlay delayed; unified sizes; centered prize text */
 
+// ---------- ASSETS ----------
 const assets = {
   closedCaseImg: 'closed_briefcase.png',
-  animImg: 'case_animation.png', // APNG in repo root
+  animImg: 'case_animation.png', // APNG (root)
   openCaseImg: 'open_briefcase.png',
   wolfieImg: 'wolfie_dealer.png',
   bgMusic: 'theme_song.mp3',
@@ -12,9 +13,11 @@ const assets = {
   smallPrizeSfx: 'small_prize.mp3'
 };
 
-// Adjust to your APNG's full length (ms). If your APNG is 3s, put 3000, etc.
-const ANIM_DURATION_MS = 2500;
+// ---------- TIMING (tweak these as needed) ----------
+const ANIM_DURATION_MS = 2500;   // how long the APNG animation takes (ms)
+const DEALER_DELAY_MS   = 1200;  // delay after case open before showing dealer overlay & sound (ms)
 
+// ---------- GAME DATA ----------
 const prizeListOrdered = [
   ".01",
   "Sticker",
@@ -26,15 +29,9 @@ const prizeListOrdered = [
   "Ninja Creami"
 ];
 
-const allowedOfferPrizes = [
-  "T-shirt",
-  "Signed poster",
-  "Luigi",
-  "Women's",
-  "Womens"
-];
+const allowedOfferPrizes = ["T-shirt","Signed poster","Luigi","Women's","Womens"];
 
-// STATE
+// ---------- STATE ----------
 let casePrizes = [];
 let playerCaseIndex = null;
 let originalPlayerIndex = null;
@@ -44,14 +41,14 @@ let revealedSet = new Set();
 let overlayVisible = false;
 let bgStarted = false;
 
-// AUDIO
+// ---------- AUDIO ----------
 const bgAudio = new Audio(assets.bgMusic); bgAudio.loop = true; bgAudio.volume = 0.5;
 const dealerAudio = new Audio(assets.dealerCall); dealerAudio.volume = 0.95;
 const biggestAudio = new Audio(assets.biggestPrizeSfx);
 const mediumAudio = new Audio(assets.mediumPrizeSfx);
 const smallAudio = new Audio(assets.smallPrizeSfx);
 
-// DOM
+// ---------- DOM ----------
 const prizeLeftEl = document.getElementById('prizeLeft');
 const prizeRightEl = document.getElementById('prizeRight');
 const boardEl = document.getElementById('board');
@@ -74,12 +71,13 @@ const caseAnimImg = document.getElementById('caseAnim');
 
 wolfieImgEl.src = assets.wolfieImg;
 
-// UTIL
-function shuffle(a){ const arr=a.slice(); for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
-function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+// ---------- UTIL ----------
+function shuffle(arr){ const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
-// build UI
+// ---------- UI BUILD ----------
 function buildUI(){
+  // prizes sidebars
   prizeLeftEl.innerHTML = '';
   prizeRightEl.innerHTML = '';
   prizeListOrdered.slice(0,4).forEach((p,i)=>{
@@ -89,6 +87,7 @@ function buildUI(){
     const li = document.createElement('li'); li.id = 'prize-' + (i+4); li.textContent = p; prizeRightEl.appendChild(li);
   });
 
+  // board cases
   boardEl.innerHTML = '';
   for(let i=0;i<8;i++){
     const wrap = document.createElement('div');
@@ -101,21 +100,14 @@ function buildUI(){
 
     const num = document.createElement('div');
     num.className = 'case-number';
-    num.textContent = (i+1);
+    num.textContent = i+1;
 
     wrap.appendChild(img);
     wrap.appendChild(num);
 
-    // store reference for toggling later via dataset
-    wrap.__img = img;
-    wrap.__num = num;
-
-    wrap.addEventListener('click', async (evt) => {
-      // safety: ignore if pointer events disabled or overlay visible
+    wrap.addEventListener('click', async () => {
       if (overlayVisible) return;
-      // if wrap is revealed, ignore
       if (revealedSet.has(i)) return;
-      // if player's case selected and clicking the player's board-case, ignore
       if (playerCaseIndex !== null && i === playerCaseIndex) return;
       await onCaseClicked(i);
     });
@@ -123,42 +115,24 @@ function buildUI(){
     boardEl.appendChild(wrap);
   }
 
-  // player-case initial state
+  // player case initial
   playerCaseImgEl.style.backgroundImage = `url(${assets.closedCaseImg})`;
   playerCaseNumberEl.textContent = '?';
 }
 
-// Manage pointer-events properly based on current state
+// ---------- INTERACTIVITY MANAGEMENT ----------
 function updateBoardInteractivity(){
   document.querySelectorAll('.case-wrap').forEach((wrap, i) => {
-    if (overlayVisible) {
-      wrap.style.pointerEvents = 'none';
-      return;
-    }
-    if (revealedSet.has(i)) {
-      wrap.style.pointerEvents = 'none';
-      return;
-    }
-    // if player hasn't picked their case yet (phase 0) allow all clicks
-    if (phase === 0) {
-      wrap.style.pointerEvents = 'auto';
-      return;
-    }
-    // after player picks, player's case should not be clickable
-    if (playerCaseIndex !== null && i === playerCaseIndex) {
-      wrap.style.pointerEvents = 'none';
-      return;
-    }
-    // otherwise allow clicks on non-revealed, non-player cases when we're in picking phases
-    if ((phase >= 1 && phase <= 3) && !revealedSet.has(i)) {
-      wrap.style.pointerEvents = 'auto';
-      return;
-    }
+    if (overlayVisible) { wrap.style.pointerEvents = 'none'; return; }
+    if (revealedSet.has(i)) { wrap.style.pointerEvents = 'none'; return; }
+    if (phase === 0) { wrap.style.pointerEvents = 'auto'; return; }
+    if (playerCaseIndex !== null && i === playerCaseIndex) { wrap.style.pointerEvents = 'none'; return; }
+    if ((phase >=1 && phase <=3) && !revealedSet.has(i)) { wrap.style.pointerEvents = 'auto'; return; }
     wrap.style.pointerEvents = 'none';
   });
 }
 
-// initialize / reset
+// ---------- GAME INITIALIZE ----------
 function initGame(){
   casePrizes = shuffle(prizeListOrdered);
   playerCaseIndex = null;
@@ -169,18 +143,18 @@ function initGame(){
   overlayVisible = false;
   bgStarted = false;
 
-  document.querySelectorAll('.case-wrap').forEach((wrap)=>{
+  document.querySelectorAll('.case-wrap').forEach(wrap=>{
     wrap.classList.remove('case-open','case-grey');
     const img = wrap.querySelector('.case-img');
     img.style.backgroundImage = `url(${assets.closedCaseImg})`;
     img.style.pointerEvents = 'auto';
-    const num = wrap.querySelector('.case-number'); num.style.display = 'block';
+    const num = wrap.querySelector('.case-number'); if (num) num.style.display = 'block';
     const pl = wrap.querySelector('.prize-label'); if (pl) pl.remove();
   });
 
   prizeListOrdered.forEach((_,i)=>{ const li=document.getElementById('prize-'+i); if(li) li.classList.remove('greyed'); });
 
-  // player's UI
+  // player UI reset
   playerCaseImgEl.style.backgroundImage = `url(${assets.closedCaseImg})`;
   playerCaseNumberEl.textContent = '?';
 
@@ -193,7 +167,7 @@ function initGame(){
   updateBoardInteractivity();
 }
 
-// autoplay background on first user interaction
+// ---------- BACKGROUND AUDIO START ----------
 function ensureBackgroundStarted(){
   if (bgStarted) return;
   bgStarted = true;
@@ -201,7 +175,7 @@ function ensureBackgroundStarted(){
   bgAudio.play().catch(()=>{});
 }
 
-// ----- click handler -----
+// ---------- CLICK HANDLER ----------
 async function onCaseClicked(index){
   if (overlayVisible) return;
   ensureBackgroundStarted();
@@ -211,13 +185,11 @@ async function onCaseClicked(index){
   if (revealedSet.has(index)) return;
 
   if (phase === 0){
-    // pick player's case
     playerCaseIndex = index;
     originalPlayerIndex = index;
     playerCaseNumberEl.textContent = index + 1;
     playerCaseImgEl.style.backgroundImage = `url(${assets.closedCaseImg})`;
     wrap.classList.add('case-grey');
-    // make that board-case non-clickable
     wrap.style.pointerEvents = 'none';
     phase = 1; picksNeeded = 3;
     titleEl.textContent = `Phase 1 — Pick ${picksNeeded} case(s) to open`;
@@ -225,25 +197,26 @@ async function onCaseClicked(index){
     return;
   }
 
-  if (phase >= 1 && phase <= 3){
+  if (phase >=1 && phase <=3){
     if (index === playerCaseIndex) return;
-    // disable interactions while animating
+
+    // block while animation + reveal occur
     overlayVisible = true;
     updateBoardInteractivity();
 
+    // play reveal (APNG once) and swap to open image
     await revealCaseWithAnimation(index);
 
-    // animation + open complete; re-enable for remaining picks (unless we're about to show dealer)
     picksNeeded--;
     overlayVisible = false;
-
     if (picksNeeded > 0){
       titleEl.textContent = `Pick ${picksNeeded} more case(s)`;
       updateBoardInteractivity();
     } else {
-      // Next steps depend on phase
+      // let user read the prize text for a moment, then show dealer (if applicable)
       if (phase === 1 || phase === 2){
-        // show dealer (dealer audio already played after open inside revealCaseWithAnimation)
+        // small delay so player reads the prize text
+        await sleep(DEALER_DELAY_MS);
         showDealerOffer();
       } else if (phase === 3){
         phase = 4;
@@ -253,7 +226,7 @@ async function onCaseClicked(index){
   }
 }
 
-// reveal with APNG overlay then show open image & prize text
+// ---------- REVEAL FLOW (APNG plays once, then open image) ----------
 async function revealCaseWithAnimation(index){
   if (revealedSet.has(index)) return;
   revealedSet.add(index);
@@ -262,10 +235,10 @@ async function revealCaseWithAnimation(index){
   const img = wrap.querySelector('.case-img');
   const num = wrap.querySelector('.case-number');
 
-  // hide number on board case (playerCase keeps its number)
-  num.style.display = 'none';
+  // hide number on board (playerCase keeps its number)
+  if (num) num.style.display = 'none';
 
-  // position and show APNG overlay (cache-bust so the animation restarts)
+  // position and show APNG overlay (cache-bust so it restarts once)
   const rect = img.getBoundingClientRect();
   caseAnimImg.style.width = `${img.clientWidth}px`;
   caseAnimImg.style.height = `${img.clientHeight}px`;
@@ -274,19 +247,19 @@ async function revealCaseWithAnimation(index){
   caseAnimImg.src = assets.animImg + '?_=' + Date.now();
   caseAnimImg.classList.remove('hidden');
 
-  // wait for animation to play (use ANIM_DURATION_MS)
+  // wait exactly ANIM_DURATION_MS for APNG to finish
   await sleep(ANIM_DURATION_MS);
 
-  // hide animation overlay and clear src
+  // hide animation overlay and clear src so it won't loop/replay
   caseAnimImg.classList.add('hidden');
   caseAnimImg.src = '';
 
-  // show opened case image
+  // show open briefcase image
   img.style.backgroundImage = `url(${assets.openCaseImg})`;
   wrap.classList.add('case-open');
   img.style.pointerEvents = 'none';
 
-  // prize label
+  // prize label centered inside white box
   let prizeLabel = wrap.querySelector('.prize-label');
   if (!prizeLabel){
     prizeLabel = document.createElement('div');
@@ -295,16 +268,15 @@ async function revealCaseWithAnimation(index){
   }
   prizeLabel.textContent = casePrizes[index];
 
-  // grey sidebar entry
+  // grey out the prize in the sidebar
   const pIdx = prizeListOrdered.findIndex(p => casePrizes[index] === p);
   if (pIdx >= 0){ const li=document.getElementById('prize-'+pIdx); if (li) li.classList.add('greyed'); }
 
-  // play dealer call AFTER the visual open
-  dealerAudio.currentTime = 0;
-  dealerAudio.play().catch(()=>{});
+  // NOTE: dealer audio & overlay are no longer played here.
+  // Dealer will appear after a small read delay (DEALER_DELAY_MS) when showDealerOffer is invoked.
 }
 
-// compute dealer offer (same logic)
+// ---------- DEALER OFFER ----------
 function computeDealerOffer(){
   const remaining = [];
   for (let i=0;i<8;i++){
@@ -332,38 +304,48 @@ function computeDealerOffer(){
   return pick ? pick.p : remainingWithIdx[0].p;
 }
 
-// show dealer overlay & block board
 function showDealerOffer(){
   overlayVisible = true;
   updateBoardInteractivity();
 
   const offer = computeDealerOffer();
   offerText.textContent = 'OFFER: ' + offer;
+
+  // play dealer call SFX and then show overlay (we already waited a read delay before calling this)
+  dealerAudio.currentTime = 0;
+  dealerAudio.play().catch(()=>{});
+
   dealerOverlay.classList.remove('hidden');
   dealerButtons.classList.remove('hidden');
 
+  // block board clicks
+  document.querySelectorAll('.case-wrap').forEach(w => w.style.pointerEvents = 'none');
+
   dealBtn.onclick = async () => {
+    dealerAudio.pause();
     dealerOverlay.classList.add('hidden');
     overlayVisible = false;
     updateBoardInteractivity();
     await revealPlayerCaseForDeal(offer);
   };
+
   noDealBtn.onclick = () => {
+    dealerAudio.pause();
     dealerOverlay.classList.add('hidden');
     overlayVisible = false;
+    updateBoardInteractivity();
     if (phase === 1){ phase = 2; picksNeeded = 2; titleEl.textContent = `Phase 2 — Pick ${picksNeeded} case(s) to open`; }
     else if (phase === 2){ phase = 3; picksNeeded = 1; titleEl.textContent = `Phase 3 — Pick ${picksNeeded} case(s) to open`; }
-    updateBoardInteractivity();
   };
 }
 
 // reveal player's case when deal accepted
 async function revealPlayerCaseForDeal(offer){
-  // reveal board version of player's case (if not revealed yet)
   if (!revealedSet.has(playerCaseIndex)){
+    // if player's board case hasn't been revealed, animate & reveal it
     await revealCaseWithAnimation(playerCaseIndex);
   }
-  // show open image in player area as well
+  // show open briefcase in player area as well
   playerCaseImgEl.style.backgroundImage = `url(${assets.openCaseImg})`;
   winText.classList.remove('hidden');
   winText.textContent = 'DEAL ACCEPTED: ' + offer;
@@ -371,7 +353,7 @@ async function revealPlayerCaseForDeal(offer){
   playWinSfxForPrize(offer);
 }
 
-// show keep/switch UI
+// keep / switch UI
 function showKeepSwitchUI(){
   keepSwitchArea.classList.remove('hidden');
   document.querySelectorAll('.case-wrap').forEach(w => w.style.pointerEvents = 'none');
@@ -386,7 +368,7 @@ function showKeepSwitchUI(){
   };
 }
 
-// final reveal sequence
+// final reveal sequence (handles switch)
 async function finalRevealSequence(switched){
   const remainingUnopened = [...Array(8).keys()].filter(i => i !== originalPlayerIndex && !revealedSet.has(i));
   const remainingIndex = remainingUnopened.length ? remainingUnopened[0] : null;
@@ -421,21 +403,12 @@ async function finalRevealSequence(switched){
   document.querySelectorAll('.case-wrap').forEach(w=> w.style.pointerEvents = 'none');
 }
 
-// play final SFX
+// play final SFX based on prize
 function playWinSfxForPrize(prize){
   const p = (prize || '').toLowerCase();
-  if (p.includes('jbl') || p.includes('ninja')) {
-    biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{});
-    return;
-  }
-  if (p.includes("women") || p.includes("luigi") || p.includes("signed poster") || p.includes("signed")) {
-    mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{});
-    return;
-  }
-  if (p.includes('.01') || p.includes('sticker') || p.includes('t-shirt') || p.includes('tshirt')) {
-    smallAudio.currentTime = 0; smallAudio.play().catch(()=>{});
-    return;
-  }
+  if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); return; }
+  if (p.includes("women") || p.includes("luigi") || p.includes("signed poster") || p.includes("signed")) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); return; }
+  if (p.includes('.01') || p.includes('sticker') || p.includes('t-shirt') || p.includes('tshirt')) { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); return; }
   smallAudio.currentTime = 0; smallAudio.play().catch(()=>{});
 }
 
