@@ -33,15 +33,15 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
 /* board grid */
 .board{ display:grid; grid-template-columns: repeat(4, 150px); gap:16px; justify-content:center; margin-bottom:16px; }
 
-/* case container (board cases) */
+/* Unified size for all case images: 150x120 */
 .case-wrap{ position:relative; width:150px; height:120px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .case-wrap .case-img{ width:150px; height:120px; background-size:cover; background-position:center; border-radius:6px; border:3px solid var(--do-yellow-border); display:flex; align-items:center; justify-content:center; }
 
-/* player case (centered under "Your Case" heading) */
+/* Player case — matched to board size (same look & alignment) */
 .player-section{ margin-top:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
 .player-section h2{ margin:0 0 8px 0; text-align:center; color:var(--do-yellow); font-size:18px; }
-.player-case{ position:relative; width:220px; height:150px; display:flex; align-items:center; justify-content:center; cursor:default; }
-.player-case .case-img{ width:100%; height:100%; background-size:cover; background-position:center; border-radius:6px; border:4px solid var(--do-yellow-border); display:flex; align-items:center; justify-content:center; }
+.player-case{ position:relative; width:150px; height:120px; display:flex; align-items:center; justify-content:center; cursor:default; }
+.player-case .case-img{ width:150px; height:120px; background-size:cover; background-position:center; border-radius:6px; border:4px solid var(--do-yellow-border); display:flex; align-items:center; justify-content:center; }
 
 /* numbers centered both on board cases and player case */
 .case-number{
@@ -54,7 +54,7 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
   font-size:22px;
   pointer-events:none;
   text-align:center;
-  background: rgba(255,255,255,0.0); /* transparent to remove yellow box */
+  background: rgba(255,255,255,0.0);
   padding:0 6px;
   line-height:1;
 }
@@ -63,18 +63,24 @@ body{ margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica,
 .case-open .case-img{ border-color:#444; }
 .case-grey .case-img{ filter:grayscale(1); opacity:0.45; }
 
-/* prize label inside opened briefcase */
+/* prize label inside opened briefcase - centered within the white box */
 .prize-label{
   position:absolute;
-  width:88%;
   left:50%;
-  top:40%;
-  transform:translateX(-50%);
+  top:50%;
+  transform:translate(-50%,-50%);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
   text-align:center;
   font-weight:800;
   color:#111;
   font-size:13px;
-  padding:6px 4px;
+  padding:6px 8px;
+  width:72%;           /* adjust to match white box width */
+  max-height:62%;
+  box-sizing:border-box;
   word-wrap:break-word;
   white-space:normal;
   pointer-events:none;
