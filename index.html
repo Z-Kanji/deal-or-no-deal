@@ -5,56 +5,53 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Deal-style Game</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Ably client (used only when you provide an ablyKey via URL param) -->
+  <!-- Ably client library -->
   <script src="https://cdn.ably.io/lib/ably.min-1.js"></script>
 </head>
 <body>
-  <!-- Entire UI inside a container that is scaled via CSS variable --ui-scale -->
-  <div id="gameContainer" class="scale-wrap">
-    <div class="game-wrap" id="gameRoot">
-      <div class="sidebar left">
-        <h3>Prizes</h3>
-        <ul id="prizeLeft" class="prize-col"></ul>
+  <div class="game-wrap">
+    <div class="sidebar left">
+      <h3>Prizes</h3>
+      <ul id="prizeLeft" class="prize-col"></ul>
+    </div>
+
+    <div class="main-area">
+      <h1 id="title">Choose your personal case</h1>
+
+      <div id="board" class="board" aria-live="polite"></div>
+
+      <div class="player-section">
+        <h2>Your Case</h2>
+        <div id="playerCase" class="player-case">
+          <div class="case-img" role="img" aria-label="Your case image"></div>
+          <div class="case-number">?</div>
+        </div>
       </div>
 
-      <div class="main-area">
-        <h1 id="title">Choose your personal case</h1>
-
-        <div id="board" class="board" aria-live="polite"></div>
-
-        <div class="player-section" aria-label="Player area">
-          <h2>Your Case</h2>
-          <div id="playerCase" class="player-case" aria-hidden="false">
-            <div class="case-img" role="img" aria-label="Your closed case"></div>
-            <div class="case-number">?</div>
-          </div>
+      <div id="keepSwitchArea" class="keep-switch-area hidden">
+        <div id="ksInstruction">Final choice — Keep your case or switch with the remaining case?</div>
+        <div class="ks-buttons">
+          <button id="keepBtn" class="green">KEEP</button>
+          <button id="switchBtn" class="red">SWITCH</button>
         </div>
-
-        <div id="keepSwitchArea" class="keep-switch-area hidden">
-          <div id="ksInstruction">Final choice — Keep your case or switch with the remaining case?</div>
-          <div class="ks-buttons">
-            <button id="keepBtn" class="green">KEEP</button>
-            <button id="switchBtn" class="red">SWITCH</button>
-          </div>
-        </div>
-
-        <div class="controls">
-          <button id="resetBtn">RESET</button>
-        </div>
-
-        <div id="winText" class="hidden" aria-live="polite"></div>
       </div>
 
-      <div class="sidebar right">
-        <h3>&nbsp;</h3>
-        <ul id="prizeRight" class="prize-col"></ul>
+      <div class="controls">
+        <button id="resetBtn">RESET</button>
       </div>
+
+      <div id="winText" class="hidden" aria-live="polite"></div>
+    </div>
+
+    <div class="sidebar right">
+      <h3>&nbsp;</h3>
+      <ul id="prizeRight" class="prize-col"></ul>
     </div>
   </div>
 
   <!-- Dealer overlay -->
   <div id="dealerOverlay" class="dealer-overlay hidden" aria-hidden="true">
-    <img id="wolfieImg" src="" alt="Dealer" />
+    <img id="wolfieImg" src="wolfie_dealer.png" alt="Dealer" />
     <div class="dealer-box" role="dialog" aria-modal="true">
       <div id="offerText" class="offer-text">OFFER: --</div>
       <div id="dealerButtons" class="dealer-buttons">
@@ -66,7 +63,7 @@
 
   <!-- Win overlay -->
   <div id="winOverlay" class="dealer-overlay hidden" aria-hidden="true">
-    <img id="winWolfie" src="" alt="Dealer" />
+    <img id="winWolfie" src="wolfie_dealer.png" alt="Dealer" />
     <div class="dealer-box" role="dialog" aria-modal="true">
       <div class="win-panel">
         <div class="win-title">YOU WIN!</div>
@@ -82,7 +79,7 @@
   </div>
 
   <!-- APNG animation overlay (positioned dynamically) -->
-  <img id="caseAnim" class="hidden" alt="Case Animation" />
+  <img id="caseAnim" class="hidden" alt="Case animation" />
 
   <script src="script.js"></script>
 </body>
