@@ -1,15 +1,13 @@
 /* script.js
    Keyboard controls: 1-8 = cases, D = DEAL, N = NO DEAL, K = KEEP, S = SWITCH.
-   Resized to fit large boards: CASE_WIDTH / CASE_HEIGHT tuned to CSS.
-   All original game logic preserved (reveals, dealer rules, SFX, overlays).
+   Note: DO NOT change game logic. Only sizing/scale are tuned here to match CSS.
 */
 
 /* ---------- CONFIG: sizing & timing ---------- */
 const CASE_WIDTH = 200;   // must match CSS --case-width
 const CASE_HEIGHT = 160;  // must match CSS --case-height
 
-// If your APNG artwork is smaller/larger, change ANIM_SCALE accordingly.
-// Keep default from previous version (if you had a working scale). Adjust if needed.
+// APNG scale factor: adjust if your APNG is smaller/larger than case images
 const ANIM_SCALE = 2.0;
 
 const FRAME_RATE = 24;
@@ -20,7 +18,7 @@ const WIN_OVERLAY_DELAY_MS = 2000; // 2s after final reveal
 /* ---------- ASSETS ---------- */
 const assets = {
   closedCaseImg: 'closed_briefcase.png',
-  animImg: 'case_animation.png', 
+  animImg: 'case_animation.png',
   openCaseImg: 'open_briefcase.png',
   wolfieImg: 'wolfie_dealer.png',
   bgMusic: 'theme_song.mp3',
@@ -41,7 +39,6 @@ const prizeListOrdered = [
   "JBL Go 4",
   "Ninja Creami"
 ];
-// dealer should never offer these four
 const DEALER_FORBIDDEN = [".01","sticker","jbl go 4","ninja creami"];
 
 /* ---------- STATE ---------- */
@@ -502,7 +499,6 @@ document.addEventListener('keydown', (ev) => {
     // emulate a click only if allowed
     const wrap = document.querySelector(`.case-wrap[data-index='${idx}']`);
     if (wrap && !revealedSet.has(idx) && !overlayVisible && !(playerCaseIndex !== null && idx === playerCaseIndex)) {
-      // record click time for dealer delay logic
       lastRevealClickStart = Date.now();
       onCaseClicked(idx).catch(()=>{});
     }
@@ -512,7 +508,6 @@ document.addEventListener('keydown', (ev) => {
 
   // Deal / No Deal
   if (k === 'd'){
-    // only if dealer overlay visible
     if (!dealerOverlay.classList.contains('hidden')) {
       dealBtn.click();
       ev.preventDefault();
