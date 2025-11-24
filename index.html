@@ -5,11 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Deal-style Game</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Ably client (used only when you provide an ablyKey via URL param) -->
+  <script src="https://cdn.ably.io/lib/ably.min-1.js"></script>
 </head>
 <body>
-  <!-- Entire UI is inside the scale wrapper which is set to 0.60 in CSS -->
-  <div class="scale-wrap">
-    <div class="game-wrap" id="gameContainer">
+  <!-- Entire UI inside a container that is scaled via CSS variable --ui-scale -->
+  <div id="gameContainer" class="scale-wrap">
+    <div class="game-wrap" id="gameRoot">
       <div class="sidebar left">
         <h3>Prizes</h3>
         <ul id="prizeLeft" class="prize-col"></ul>
@@ -62,7 +64,7 @@
     </div>
   </div>
 
-  <!-- Win overlay (wolfie + open case + prize + YOU WIN text) -->
+  <!-- Win overlay -->
   <div id="winOverlay" class="dealer-overlay hidden" aria-hidden="true">
     <img id="winWolfie" src="" alt="Dealer" />
     <div class="dealer-box" role="dialog" aria-modal="true">
