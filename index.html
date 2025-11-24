@@ -7,43 +7,46 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="game-wrap">
-    <div class="sidebar left">
-      <h3>Prizes</h3>
-      <ul id="prizeLeft" class="prize-col"></ul>
-    </div>
+  <!-- scale wrapper: CSS will scale this whole block down for Daktronics -->
+  <div class="scale-wrap">
+    <div class="game-wrap">
+      <div class="sidebar left">
+        <h3>Prizes</h3>
+        <ul id="prizeLeft" class="prize-col"></ul>
+      </div>
 
-    <div class="main-area">
-      <h1 id="title">Choose your personal case</h1>
+      <div class="main-area">
+        <h1 id="title">Choose your personal case</h1>
 
-      <div id="board" class="board" aria-live="polite"></div>
+        <div id="board" class="board" aria-live="polite"></div>
 
-      <div class="player-section" aria-label="Player area">
-        <h2>Your Case</h2>
-        <div id="playerCase" class="player-case" aria-hidden="false">
-          <div class="case-img" role="img" aria-label="Your closed case"></div>
-          <div class="case-number">?</div>
+        <div class="player-section" aria-label="Player area">
+          <h2>Your Case</h2>
+          <div id="playerCase" class="player-case" aria-hidden="false">
+            <div class="case-img" role="img" aria-label="Your closed case"></div>
+            <div class="case-number">?</div>
+          </div>
         </div>
-      </div>
 
-      <div id="keepSwitchArea" class="keep-switch-area hidden">
-        <div id="ksInstruction">Final choice — Keep your case or switch with the remaining case?</div>
-        <div class="ks-buttons">
-          <button id="keepBtn" class="green">KEEP</button>
-          <button id="switchBtn" class="red">SWITCH</button>
+        <div id="keepSwitchArea" class="keep-switch-area hidden">
+          <div id="ksInstruction">Final choice — Keep your case or switch with the remaining case?</div>
+          <div class="ks-buttons">
+            <button id="keepBtn" class="green">KEEP</button>
+            <button id="switchBtn" class="red">SWITCH</button>
+          </div>
         </div>
+
+        <div class="controls">
+          <button id="resetBtn">RESET</button>
+        </div>
+
+        <div id="winText" class="hidden" aria-live="polite"></div>
       </div>
 
-      <div class="controls">
-        <button id="resetBtn">RESET</button>
+      <div class="sidebar right">
+        <h3>&nbsp;</h3>
+        <ul id="prizeRight" class="prize-col"></ul>
       </div>
-
-      <div id="winText" class="hidden" aria-live="polite"></div>
-    </div>
-
-    <div class="sidebar right">
-      <h3>&nbsp;</h3>
-      <ul id="prizeRight" class="prize-col"></ul>
     </div>
   </div>
 
