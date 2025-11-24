@@ -1,55 +1,32 @@
 :root{
   --do-yellow: #f1d27b;
   --do-yellow-border: #c9a64f;
-
-  /* CASE size */
-  --case-width: 200px;
-  --case-height: 160px;
-
-  /* FIXED UI scale (50% to fit Daktronics 16:9). You can change here if needed. */
-  --ui-scale: 0.50;
+  --bg: #0b0b0b;
+  --case-width: 150px;
+  --case-height: 120px;
+  --ui-scale: 1; /* change here if you want global scale; default 1 */
 }
 
-/* Force black background no matter what */
-html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  background: #000000 !important;
-  overflow: hidden;
-  color: #fff;
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* global */
+*{box-sizing:border-box}
+html,body{ height:100%; margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica, sans-serif; }
+body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
 
-/* Scale wrapper: this scales the whole app. No counteracting width/height adjustments. */
-.scale-wrap{
-  width:100vw;
-  height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  transform: scale(var(--ui-scale));
-  transform-origin: 50% 0%;
-  background: transparent;
-}
-
-/* main container */
+/* Wrapper that allows scaling if necessary */
 .game-wrap{
-  width: min(1600px, 95vw);
-  margin: 0 auto;
+  transform: scale(var(--ui-scale));
+  transform-origin: top left;
   display:flex;
   gap:24px;
   padding:18px;
   align-items:flex-start;
   justify-content:center;
   min-height:100vh;
-  box-sizing:border-box;
-  background: transparent;
+  width:100%;
 }
 
 /* Sidebar prize columns */
-.sidebar{ width:220px; }
+.sidebar{ width:210px; }
 .sidebar h3{ color:var(--do-yellow); margin:0 0 10px 0; font-size:18px; text-transform:uppercase; }
 .prize-col{ list-style:none; padding:0; margin:0; }
 .prize-col li{
@@ -68,93 +45,60 @@ html, body {
 .prize-col li.greyed{ opacity:0.35; filter: grayscale(1); }
 
 /* main area and board */
-.main-area{ flex:1; text-align:center; position:relative; max-width:1100px; }
-#title{ color:var(--do-yellow); margin:8px 0 12px; font-size:22px; }
+.main-area{ width:860px; text-align:center; position:relative; }
+#title{ color:var(--do-yellow); margin:8px 0 12px; font-size:20px; }
 
-/* board grid responsive */
-.board{
-  display:grid;
-  grid-template-columns: repeat(4, var(--case-width));
-  gap:20px;
-  justify-content:center;
-  margin-bottom:18px;
-}
+/* board grid */
+.board{ display:grid; grid-template-columns: repeat(4, var(--case-width)); gap:16px; justify-content:center; margin-bottom:16px; }
 
-/* unified case container */
+/* case container */
 .case-wrap{ position:relative; width:var(--case-width); height:var(--case-height); display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.case-wrap .case-img{ width:var(--case-width); height:var(--case-height); background-size:cover; background-position:center; border-radius:6px; border:3px solid var(--do-yellow-border); display:flex; align-items:center; justify-content:center; }
-
-/* player case uses same size */
-.player-section{ margin-top:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-.player-section h2{ margin:0 0 8px 0; text-align:center; color:var(--do-yellow); font-size:18px; }
-.player-case{ position:relative; width:var(--case-width); height:var(--case-height); display:flex; align-items:center; justify-content:center; cursor:default; }
-.player-case .case-img{ width:var(--case-width); height:var(--case-height); background-size:cover; background-position:center; border-radius:6px; border:4px solid var(--do-yellow-border); display:flex; align-items:center; justify-content:center; }
-
-/* numbers centered */
+.case-img{ width:var(--case-width); height:var(--case-height); background-size:cover; background-position:center; border-radius:6px; border:3px solid var(--do-yellow-border); display:block; }
 .case-number{
-  position:absolute;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%);
-  font-weight:900;
-  color:#111;
-  font-size:26px;
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-weight:900; color:#111; font-size:20px;
+  background: rgba(255,255,255,0.85); padding:4px 8px; border-radius:6px;
   pointer-events:none;
-  text-align:center;
-  background: rgba(255,255,255,0.0);
-  padding:0 6px;
-  line-height:1;
 }
-
-/* opened case and grey style */
 .case-open .case-img{ border-color:#444; }
 .case-grey .case-img{ filter:grayscale(1); opacity:0.45; }
 
-/* prize label centered inside open briefcase white box */
+/* prize label inside opened briefcase */
 .prize-label{
   position:absolute;
+  width:84%;
   left:50%;
   top:50%;
   transform:translate(-50%,-50%);
-  display:flex;
-  align-items:center;
-  justify-content:center;
   text-align:center;
   font-weight:800;
   color:#111;
   font-size:14px;
-  padding:6px 8px;
-  width:66%;
-  max-height:64%;
-  box-sizing:border-box;
-  word-wrap:break-word;
-  white-space:normal;
+  padding:6px;
   pointer-events:none;
-  line-height:1.05;
+  word-wrap:break-word;
 }
 
-/* Keep/Switch area */
+/* player area */
+.player-section{ margin-top:10px; }
+.player-case{ width:220px; height:150px; margin:8px auto 0; background: linear-gradient(180deg,#d7b86a,#b99643); border:4px solid var(--do-yellow-border); font-size:36px; display:flex; align-items:center; justify-content:center; color:#111; position:relative; }
+.player-case .case-img{ position:absolute; left:0; top:0; width:100%; height:100%; background-size:cover; background-position:center; border-radius:6px; border:4px solid var(--do-yellow-border); }
+.player-case .case-number{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background: rgba(255,255,255,0.85); padding:6px 10px; font-size:28px; color:#111; }
+
+/* Keep/Switch */
 .keep-switch-area{ margin-top:18px; }
 .ks-buttons{ margin-top:10px; display:flex; gap:18px; justify-content:center; }
 .green{ background:#1e8b3a; color:#fff; padding:12px 24px; border-radius:8px; border:none; font-weight:800; font-size:18px; cursor:pointer; }
 .red{ background:#b71c1c; color:#fff; padding:12px 24px; border-radius:8px; border:none; font-weight:800; font-size:18px; cursor:pointer; }
 
 /* dealer overlay */
-.dealer-overlay{ position:fixed; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; z-index:999; background: rgba(0,0,0,0.65); }
+.dealer-overlay{ position:fixed; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; z-index:999; background: rgba(0,0,0,0.55); }
 .dealer-overlay img{ max-width:90%; height:auto; display:block; pointer-events:none; }
 .dealer-box{ position:absolute; width:70%; max-width:1100px; bottom:18%; left:50%; transform:translateX(-50%); text-align:center; pointer-events:auto; }
-.offer-text{ background:#000; color:var(--do-yellow); font-weight:900; font-size:40px; padding:12px 20px; border-radius:6px; border:3px solid #222; box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
+.offer-text{ background:#000; color:var(--do-yellow); font-weight:900; font-size:36px; padding:12px 20px; border-radius:6px; border:3px solid #222; box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
 .dealer-buttons{ margin-top:14px; display:flex; gap:20px; justify-content:center; }
-.dealer-buttons button{ font-size:22px; padding:12px 28px; border-radius:8px; border:none; cursor:pointer; font-weight:800; }
+.dealer-buttons button{ font-size:20px; padding:12px 28px; border-radius:8px; border:none; cursor:pointer; font-weight:800; }
 .deal-btn{ background:#1e8b3a; color:#fff; }
 .no-deal-btn{ background:#b71c1c; color:#fff; }
-
-/* Win overlay specific */
-.win-panel{ background:transparent; color:#fff; display:flex; flex-direction:column; align-items:center; gap:12px; }
-.win-title{ font-size:54px; font-weight:900; color:var(--do-yellow); text-shadow: 0 4px 10px rgba(0,0,0,0.6); }
-.win-case{ display:flex; flex-direction:column; align-items:center; gap:8px; }
-.win-case .win-case-img{ width:var(--case-width); height:var(--case-height); background-size:cover; background-position:center; border-radius:6px; border:4px solid var(--do-yellow-border); }
-.win-prize-text{ margin-top:6px; font-weight:900; color:#111; background:#f6f1e0; padding:6px 12px; border-radius:6px; }
 
 /* helpers */
 .hidden{ display:none; }
@@ -169,3 +113,9 @@ html, body {
   pointer-events:none;
   object-fit:contain;
 }
+
+/* win overlay */
+.win-panel{ background:transparent; color:#fff; display:flex; flex-direction:column; align-items:center; gap:12px; }
+.win-title{ font-size:48px; font-weight:900; color:var(--do-yellow); text-shadow: 0 4px 10px rgba(0,0,0,0.6); }
+.win-case .win-case-img{ width:var(--case-width); height:var(--case-height); background-size:cover; background-position:center; border-radius:6px; border:4px solid var(--do-yellow-border); }
+.win-prize-text{ margin-top:6px; font-weight:900; color:#111; background:#f6f1e0; padding:6px 12px; border-radius:6px; }
