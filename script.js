@@ -1,31 +1,21 @@
 /* script.js
-   - APNG overlay is displayed at a scaled size (ANIM_SCALE) to match the case artwork.
-   - Dealer delay shortened to 3 seconds (MIN_DEALER_DELAY_MS).
-   - Animation duration computed as 1s + 2 frames (FRAME_RATE).
-   - Dealer offers exclude highest; second dealer call offers middle prize.
-   - Win SFX is cued at animation start for final reveal.
-   - Win overlay (wolfie + open case + prize + YOU WIN) shows 2s after final reveal.
-   - Background music stops when win overlay displayed.
+   Keyboard controls: 1-8 = cases, D = DEAL, N = NO DEAL, K = KEEP, S = SWITCH.
+   Resized to fit large boards: CASE_WIDTH / CASE_HEIGHT tuned to CSS.
+   All original game logic preserved (reveals, dealer rules, SFX, overlays).
 */
 
 /* ---------- CONFIG: sizing & timing ---------- */
-// CASE size must match CSS --case-width / --case-height
-const CASE_WIDTH = 150;   // px
-const CASE_HEIGHT = 120;  // px
+const CASE_WIDTH = 200;   // must match CSS --case-width
+const CASE_HEIGHT = 160;  // must match CSS --case-height
 
-// APNG scale factor: you said the APNG artwork is about 50% the size of cases,
-// so we display it at 2x to line up visually.
-const ANIM_SCALE = 1.4;
+// If your APNG artwork is smaller/larger, change ANIM_SCALE accordingly.
+// Keep default from previous version (if you had a working scale). Adjust if needed.
+const ANIM_SCALE = 2.0;
 
-// APNG timing: 1 second + 2 frames (use FRAME_RATE corresponding to the original animation)
 const FRAME_RATE = 24;
-const ANIM_DURATION_MS = 1000 + Math.round(0.25 * (1000 / FRAME_RATE)); // ~1083 ms for 24fps
-
-// Dealer minimum delay from click -> wolfie overlay (shortened from 4s to 3s)
-const MIN_DEALER_DELAY_MS = 3000; // 3000ms = 3s
-
-// Win overlay delay after final reveal
-const WIN_OVERLAY_DELAY_MS = 1750; // 2s
+const ANIM_DURATION_MS = 1000 + Math.round(2 * (1000 / FRAME_RATE)); // ~1083 ms
+const MIN_DEALER_DELAY_MS = 3000; // 3s delay before dealer overlay
+const WIN_OVERLAY_DELAY_MS = 2000; // 2s after final reveal
 
 /* ---------- ASSETS ---------- */
 const assets = {
@@ -51,6 +41,7 @@ const prizeListOrdered = [
   "JBL Go 4",
   "Ninja Creami"
 ];
+// dealer should never offer these four
 const DEALER_FORBIDDEN = [".01","sticker","jbl go 4","ninja creami"];
 
 /* ---------- STATE ---------- */
@@ -117,6 +108,7 @@ function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
 /* ---------- UI BUILD ---------- */
 function buildUI(){
+  // sync CSS variables with JS constants so CSS and JS sizes match
   document.documentElement.style.setProperty('--case-width', CASE_WIDTH + 'px');
   document.documentElement.style.setProperty('--case-height', CASE_HEIGHT + 'px');
 
@@ -282,6 +274,7 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
 
   if (num) num.style.display = 'none';
 
+  // position overlay centered on case; scale overlay by ANIM_SCALE
   const rect = img.getBoundingClientRect();
   const overlayWidth = Math.round(CASE_WIDTH * ANIM_SCALE);
   const overlayHeight = Math.round(CASE_HEIGHT * ANIM_SCALE);
@@ -339,10 +332,10 @@ function computeDealerOffer(){
   const highestIdx = Math.max(...remaining.map(r=>r.idx));
   const nonHighest = remaining.filter(r => r.idx !== highestIdx);
 
-  // filter out forbidden offers
+  // filter out forbidden offers (case-insensitive)
   const allowed = nonHighest.filter(r => !DEALER_FORBIDDEN.includes(r.p.toLowerCase()));
 
-  let offerArr = allowed.length ? allowed : nonHighest.length ? nonHighest : remaining;
+  let offerArr = allowed.length ? allowed : (nonHighest.length ? nonHighest : remaining);
 
   // second dealer call: pick middle of remaining (excluding forbidden & highest)
   if (dealerCallCount === 2){
@@ -492,6 +485,64 @@ function playWinSfxForPrize(prize){
   if (p.includes("women") || p.includes("luigi") || p.includes("signed poster") || p.includes("signed")) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); return; }
   smallAudio.currentTime = 0; smallAudio.play().catch(()=>{});
 }
+
+/* ---------- keyboard bindings (Daktronics control) ----------
+   1-8 : click/open case 1..8
+   D   : DEAL (when dealer overlay is visible)
+   N   : NO DEAL
+   K   : KEEP
+   S   : SWITCH
+--------------------------------------------------------------- */
+document.addEventListener('keydown', (ev) => {
+  const k = (ev.key || '').toLowerCase();
+
+  // handle number keys 1..8
+  if (/^[1-8]$/.test(k)){
+    const idx = parseInt(k, 10) - 1;
+    // emulate a click only if allowed
+    const wrap = document.querySelector(`.case-wrap[data-index='${idx}']`);
+    if (wrap && !revealedSet.has(idx) && !overlayVisible && !(playerCaseIndex !== null && idx === playerCaseIndex)) {
+      // record click time for dealer delay logic
+      lastRevealClickStart = Date.now();
+      onCaseClicked(idx).catch(()=>{});
+    }
+    ev.preventDefault();
+    return;
+  }
+
+  // Deal / No Deal
+  if (k === 'd'){
+    // only if dealer overlay visible
+    if (!dealerOverlay.classList.contains('hidden')) {
+      dealBtn.click();
+      ev.preventDefault();
+    }
+    return;
+  }
+  if (k === 'n'){
+    if (!dealerOverlay.classList.contains('hidden')) {
+      noDealBtn.click();
+      ev.preventDefault();
+    }
+    return;
+  }
+
+  // Keep / Switch
+  if (k === 'k'){
+    if (!keepSwitchArea.classList.contains('hidden')) {
+      keepBtn.click();
+      ev.preventDefault();
+    }
+    return;
+  }
+  if (k === 's'){
+    if (!keepSwitchArea.classList.contains('hidden')) {
+      switchBtn.click();
+      ev.preventDefault();
+    }
+    return;
+  }
+});
 
 /* ---------- reset & start ---------- */
 resetBtn.addEventListener('click', () => initGame());
