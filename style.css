@@ -1,32 +1,37 @@
 :root{
   --do-yellow: #f1d27b;
   --do-yellow-border: #c9a64f;
-  --bg: #000000;                /* KEEP BACKGROUND BLACK as requested */
 
-  /* Larger case size to suit Daktronics large screens - adjust if needed */
+  /* CASE size */
   --case-width: 200px;
   --case-height: 160px;
 
-  /* UI scale: change this to zoom the entire page.
-     Example: 1.0 = normal size, 0.9 = 90% (zoomed out), 0.8 = 80% */
-  --ui-scale: 0.80;
+  /* UI scale: set to 0.60 as requested */
+  --ui-scale: 0.60;
 }
 
-*{box-sizing:border-box}
-html,body{ height:100%; margin:0; padding:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica, sans-serif; }
-body{ overflow:hidden; } /* prevent Daktronics viewer from adding scrollbars */
+/* FORCE BLACK BACKGROUND */
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #000000 !important;
+  overflow: hidden;
+  color: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+}
 
-/* This wrapper scales the whole game UI down to fit the board.
-   Change --ui-scale in :root to zoom in/out as needed. */
+/* This wrapper scales the entire UI down so you don't need to resize on Daktronics */
 .scale-wrap{
   width:100vw;
   height:100vh;
   display:flex;
   align-items:center;
   justify-content:center;
-  /* scale the internal UI */
   transform: scale(var(--ui-scale));
   transform-origin: 50% 0%;
+  background: transparent;
 }
 
 /* main container */
@@ -135,7 +140,7 @@ body{ overflow:hidden; } /* prevent Daktronics viewer from adding scrollbars */
 .red{ background:#b71c1c; color:#fff; padding:12px 24px; border-radius:8px; border:none; font-weight:800; font-size:18px; cursor:pointer; }
 
 /* dealer overlay */
-.dealer-overlay{ position:fixed; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; z-index:999; background: rgba(0,0,0,0.55); }
+.dealer-overlay{ position:fixed; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; z-index:999; background: rgba(0,0,0,0.65); }
 .dealer-overlay img{ max-width:90%; height:auto; display:block; pointer-events:none; }
 .dealer-box{ position:absolute; width:70%; max-width:1100px; bottom:18%; left:50%; transform:translateX(-50%); text-align:center; pointer-events:auto; }
 .offer-text{ background:#000; color:var(--do-yellow); font-weight:900; font-size:40px; padding:12px 20px; border-radius:6px; border:3px solid #222; box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
