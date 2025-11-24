@@ -1,19 +1,10 @@
-/* script.js
-   Scale set to 0.60 via CSS. Background forced black.
-   Keyboard controls: 1-8 = cases, D = DEAL, N = NO DEAL, K = KEEP, S = SWITCH.
-   Dealer never offers forbidden prizes. Game logic preserved.
+/* Full game + Ably integration
+   - Place in repo root
+   - Ably key is embedded below (as requested)
+   - Use ?slave=1 in URL for Daktronics display to run in slave/listen mode
 */
 
-/* ---------- CONFIG: sizing & timing ---------- */
-const CASE_WIDTH = 200;   // px (matches CSS --case-width)
-const CASE_HEIGHT = 160;  // px (matches CSS --case-height)
-const ANIM_SCALE = 2.0;   // tweak only if your APNG needs scaling
-const FRAME_RATE = 24;
-const ANIM_DURATION_MS = 1000 + Math.round(2 * (1000 / FRAME_RATE));
-const MIN_DEALER_DELAY_MS = 3000; // 3s
-const WIN_OVERLAY_DELAY_MS = 2000; // 2s
-
-/* ---------- ASSETS ---------- */
+/* ---------- CONFIG ---------- */
 const assets = {
   closedCaseImg: 'closed_briefcase.png',
   animImg: 'case_animation.png',
@@ -26,7 +17,6 @@ const assets = {
   smallPrizeSfx: 'small_prize.mp3'
 };
 
-/* ---------- GAME DATA ---------- */
 const prizeListOrdered = [
   ".01",
   "Sticker",
@@ -37,8 +27,27 @@ const prizeListOrdered = [
   "JBL Go 4",
   "Ninja Creami"
 ];
-// Dealer must never offer these
-const DEALER_FORBIDDEN = [".01","sticker","jbl go 4","ninja creami"];
+
+const allowedOfferPrizes = ["t-shirt","signed poster","luigi","women","womens"]; // lowercase match
+
+const FRAME_RATE = 24;
+const ANIM_DURATION_MS = 1000 + Math.round(2 * (1000 / FRAME_RATE)); // ~1083ms
+const MIN_DEALER_DELAY_MS = 3000;
+const WIN_OVERLAY_DELAY_MS = 2000;
+const CASE_WIDTH = 150;
+const CASE_HEIGHT = 120;
+const ANIM_SCALE = 2.0;
+
+/* ---------- URL params ---------- */
+const urlParams = new URLSearchParams(location.search);
+const IS_SLAVE = urlParams.get('slave') === '1';
+
+/* ---------- ABLY KEY (embedded per request) ---------- */
+/* You provided this key; it's placed here so pages can connect directly.
+   If you'd prefer, you can remove this and pass ?ablyKey=YOURKEY in the URL instead. */
+const EMBEDDED_ABLY_KEY = 'U4A72w.4W1fdQ:oTpv1lav0NvdYwzCYwO5W50FTG6l6N4k5OpKpaaDVyQ';
+const URL_ABLY_KEY = urlParams.get('ablyKey');
+const ABLY_KEY = URL_ABLY_KEY || EMBEDDED_ABLY_KEY;
 
 /* ---------- STATE ---------- */
 let casePrizes = [];
@@ -53,13 +62,8 @@ let dealerCallCount = 0;
 let lastRevealClickStart = 0;
 
 /* ---------- AUDIO ---------- */
-const bgAudio = new Audio(assets.bgMusic);
-bgAudio.loop = true;
-bgAudio.volume = 0.5;
-
-const dealerAudio = new Audio(assets.dealerCall);
-dealerAudio.volume = 0.95;
-
+const bgAudio = new Audio(assets.bgMusic); bgAudio.loop = true; bgAudio.volume = 0.5;
+const dealerAudio = new Audio(assets.dealerCall); dealerAudio.volume = 0.95;
 const biggestAudio = new Audio(assets.biggestPrizeSfx);
 const mediumAudio = new Audio(assets.mediumPrizeSfx);
 const smallAudio = new Audio(assets.smallPrizeSfx);
@@ -98,49 +102,73 @@ const caseAnimImg = document.getElementById('caseAnim');
 wolfieImgEl.src = assets.wolfieImg;
 winWolfie.src = assets.wolfieImg;
 
-/* ---------- UTIL ---------- */
+/* ---------- UTILS ---------- */
 function shuffle(a){ const arr=a.slice(); for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
+/* ---------- ABLY (client-only) ---------- */
+let ably = null;
+let ablyChannel = null;
+function setupAbly(key){
+  if (!key) return;
+  try {
+    ably = new Ably.Realtime(key);
+    ablyChannel = ably.channels.get('deal-game-channel');
+    ablyChannel.subscribe((msg) => {
+      const m = msg.data;
+      if (!m || !m.type) return;
+      // only slaves apply remote messages; if master wants echo handling it can also listen
+      if (IS_SLAVE) handleRemoteMessage(m);
+    });
+    ably.connection.on('connected', () => console.log('Ably connected'));
+  } catch(e){
+    console.warn('Ably init failed', e);
+  }
+}
+function ablyPublish(obj){
+  if (!ablyChannel) return;
+  try { ablyChannel.publish('state', obj); } catch(e){ console.warn('Ably publish failed', e); }
+}
+if (ABLY_KEY) setupAbly(ABLY_KEY);
+
 /* ---------- UI BUILD ---------- */
 function buildUI(){
-  document.documentElement.style.setProperty('--case-width', CASE_WIDTH + 'px');
-  document.documentElement.style.setProperty('--case-height', CASE_HEIGHT + 'px');
-
   prizeLeftEl.innerHTML = '';
   prizeRightEl.innerHTML = '';
   prizeListOrdered.slice(0,4).forEach((p,i)=>{
-    const li = document.createElement('li'); li.id = 'prize-' + i; li.textContent = p; prizeLeftEl.appendChild(li);
+    const li = document.createElement('li'); li.id='prize-'+i; li.textContent=p; prizeLeftEl.appendChild(li);
   });
   prizeListOrdered.slice(4).forEach((p,i)=>{
-    const li = document.createElement('li'); li.id = 'prize-' + (i+4); li.textContent = p; prizeRightEl.appendChild(li);
+    const li = document.createElement('li'); li.id='prize-'+(i+4); li.textContent=p; prizeRightEl.appendChild(li);
   });
 
   boardEl.innerHTML = '';
   for(let i=0;i<8;i++){
     const wrap = document.createElement('div');
-    wrap.className = 'case-wrap';
+    wrap.className='case-wrap';
     wrap.dataset.index = i;
 
     const img = document.createElement('div');
-    img.className = 'case-img';
+    img.className='case-img';
     img.style.backgroundImage = `url(${assets.closedCaseImg})`;
+    img.dataset.index = i;
 
     const num = document.createElement('div');
-    num.className = 'case-number';
+    num.className='case-number';
     num.textContent = (i+1);
 
     wrap.appendChild(img);
     wrap.appendChild(num);
-
     wrap.addEventListener('click', async () => {
+      if (IS_SLAVE) return;
       if (overlayVisible) return;
       if (revealedSet.has(i)) return;
       if (playerCaseIndex !== null && i === playerCaseIndex) return;
       lastRevealClickStart = Date.now();
+      if (ABLY_KEY) ablyPublish({ type:'revealRequest', index:i });
       await onCaseClicked(i);
+      if (ABLY_KEY) ablyPublish({ type:'reveal', index:i, casePrizes });
     });
-
     boardEl.appendChild(wrap);
   }
 
@@ -151,6 +179,7 @@ function buildUI(){
 /* ---------- INTERACTIVITY ---------- */
 function updateBoardInteractivity(){
   document.querySelectorAll('.case-wrap').forEach((wrap,i)=>{
+    if (IS_SLAVE){ wrap.style.pointerEvents = 'none'; return; }
     if (overlayVisible){ wrap.style.pointerEvents = 'none'; return; }
     if (revealedSet.has(i)){ wrap.style.pointerEvents = 'none'; return; }
     if (phase === 0){ wrap.style.pointerEvents = 'auto'; return; }
@@ -195,6 +224,10 @@ function initGame(){
 
   titleEl.textContent = 'Choose your personal case';
   updateBoardInteractivity();
+
+  if (!IS_SLAVE && ABLY_KEY) {
+    ablyPublish({ type: 'init', casePrizes });
+  }
 }
 
 /* ---------- BG AUDIO ---------- */
@@ -217,13 +250,14 @@ async function onCaseClicked(index){
   if (phase === 0){
     playerCaseIndex = index;
     originalPlayerIndex = index;
-    playerCaseNumberEl.textContent = index + 1;
+    playerCaseNumberEl.textContent = index+1;
     playerCaseImgEl.style.backgroundImage = `url(${assets.closedCaseImg})`;
     wrap.classList.add('case-grey');
     wrap.style.pointerEvents = 'none';
     phase = 1; picksNeeded = 3;
     titleEl.textContent = `Phase 1 — Pick ${picksNeeded} case(s) to open`;
     updateBoardInteractivity();
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'playerPick', index });
     return;
   }
 
@@ -233,8 +267,11 @@ async function onCaseClicked(index){
     overlayVisible = true;
     updateBoardInteractivity();
 
-    // reveal animation then open
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealRequest', index });
+
     await revealCaseWithAnimation(index, { cueWin: false });
+
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'reveal', index, casePrizes });
 
     picksNeeded--;
     overlayVisible = false;
@@ -250,15 +287,18 @@ async function onCaseClicked(index){
       if (phase === 1 || phase === 2){
         dealerCallCount++;
         showDealerOffer();
+        if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'dealerOffer', offer: currentOfferText, dealerCallCount });
       } else if (phase === 3){
         phase = 4;
         showKeepSwitchUI();
+        if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'phase4' });
       }
     }
   }
 }
 
-/* ---------- reveal: APNG plays once then open image ---------- */
+/* ---------- reveal with animation ---------- */
+let currentOfferText = 'No Offer';
 async function revealCaseWithAnimation(index, options = { cueWin: false }){
   if (revealedSet.has(index)) return;
   revealedSet.add(index);
@@ -281,7 +321,6 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   caseAnimImg.style.top = top + 'px';
   caseAnimImg.style.objectFit = 'contain';
 
-  // restart APNG and show once
   caseAnimImg.src = assets.animImg + '?_=' + Date.now();
   caseAnimImg.classList.remove('hidden');
 
@@ -290,7 +329,7 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
     playWinSfxForPrize(prize);
   }
 
-  await sleep(ANIM_DURATION_MS);
+  await new Promise(res => setTimeout(res, ANIM_DURATION_MS));
 
   caseAnimImg.classList.add('hidden');
   caseAnimImg.src = '';
@@ -311,7 +350,7 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   if (pIdx >= 0){ const li=document.getElementById('prize-'+pIdx); if (li) li.classList.add('greyed'); }
 }
 
-/* ---------- dealer offer calculation ---------- */
+/* ---------- compute dealer offer ---------- */
 function computeDealerOffer(){
   const remaining = [];
   for (let i=0;i<8;i++){
@@ -319,26 +358,28 @@ function computeDealerOffer(){
     if (revealedSet.has(i)) continue;
     remaining.push({p: casePrizes[i], idx: prizeListOrdered.indexOf(casePrizes[i])});
   }
-  remaining.sort((a,b)=>a.idx - b.idx);
+  remaining.sort((a,b)=>a.idx-b.idx);
   if (remaining.length === 0) return "No Offer";
 
   const highestIdx = Math.max(...remaining.map(r=>r.idx));
   const nonHighest = remaining.filter(r => r.idx !== highestIdx);
 
-  // remove forbidden by case-insensitive match
-  const allowed = nonHighest.filter(r => !DEALER_FORBIDDEN.includes(r.p.toLowerCase()));
-
-  let pool = allowed.length ? allowed : (nonHighest.length ? nonHighest : remaining);
-
-  // second dealer call: middle of pool (if possible)
   if (dealerCallCount === 2){
-    const mid = Math.floor((pool.length - 1) / 2);
-    return pool[mid].p;
+    const arr = nonHighest.length ? nonHighest : remaining;
+    const mid = Math.floor((arr.length - 1) / 2);
+    return arr[mid].p;
   }
 
-  // otherwise random from pool
-  const pick = pool[Math.floor(Math.random() * pool.length)];
-  return pick.p;
+  let candidates = nonHighest.filter(r => {
+    const key = r.p.toLowerCase();
+    return allowedOfferPrizes.some(a => key.includes(a));
+  });
+
+  if (candidates.length === 0){
+    candidates = nonHighest.length ? nonHighest : remaining;
+  }
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  return pick ? pick.p : remaining[0].p;
 }
 
 /* ---------- show dealer overlay ---------- */
@@ -347,9 +388,9 @@ function showDealerOffer(){
   updateBoardInteractivity();
 
   const offer = computeDealerOffer();
+  currentOfferText = offer;
   offerText.textContent = 'OFFER: ' + offer;
 
-  // play dealer SFX only when overlay appears
   dealerAudio.currentTime = 0;
   dealerAudio.play().catch(()=>{});
 
@@ -364,10 +405,13 @@ function showDealerOffer(){
     overlayVisible = false;
     updateBoardInteractivity();
 
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'dealAccepted', offer });
+
     await revealPlayerCaseForDeal(offer);
 
     await sleep(WIN_OVERLAY_DELAY_MS);
     showWinOverlay(offer);
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'showWin', prize: offer });
   };
 
   noDealBtn.onclick = () => {
@@ -377,10 +421,12 @@ function showDealerOffer(){
     updateBoardInteractivity();
     if (phase === 1){ phase = 2; picksNeeded = 2; titleEl.textContent = `Phase 2 — Pick ${picksNeeded} case(s) to open`; }
     else if (phase === 2){ phase = 3; picksNeeded = 1; titleEl.textContent = `Phase 3 — Pick ${picksNeeded} case(s) to open`; }
+
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'noDeal', phase, picksNeeded });
   };
 }
 
-/* ---------- reveal player case for dealer ---------- */
+/* ---------- reveal player's case for a deal ---------- */
 async function revealPlayerCaseForDeal(offer){
   if (!revealedSet.has(playerCaseIndex)){
     await revealCaseWithAnimation(playerCaseIndex, { cueWin: true });
@@ -391,9 +437,8 @@ async function revealPlayerCaseForDeal(offer){
   document.querySelectorAll('.case-wrap').forEach(w=> w.style.pointerEvents = 'none');
 }
 
-/* ---------- win overlay (music left playing) ---------- */
+/* ---------- win overlay ---------- */
 function showWinOverlay(prize){
-  // do NOT stop background music — intentional: music plays continuously
   winCaseImg.style.backgroundImage = `url(${assets.openCaseImg})`;
   winPrizeText.textContent = prize;
   winOverlay.classList.remove('hidden');
@@ -420,17 +465,21 @@ function showKeepSwitchUI(){
 
   keepBtn.onclick = async () => {
     keepSwitchArea.classList.add('hidden');
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'keepChosen' });
     await finalRevealSequence(false);
     await sleep(WIN_OVERLAY_DELAY_MS);
     const finalPrize = getFinalPrizeForDisplay();
     showWinOverlay(finalPrize);
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'finalReveal', finalPrize });
   };
   switchBtn.onclick = async () => {
     keepSwitchArea.classList.add('hidden');
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'switchChosen' });
     await finalRevealSequence(true);
     await sleep(WIN_OVERLAY_DELAY_MS);
     const finalPrize = getFinalPrizeForDisplay();
     showWinOverlay(finalPrize);
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'finalReveal', finalPrize });
   };
 }
 
@@ -471,9 +520,11 @@ async function finalRevealSequence(switched){
   winText.classList.remove('hidden');
   winText.textContent = 'YOU WIN: ' + finalPrize;
   document.querySelectorAll('.case-wrap').forEach(w=> w.style.pointerEvents = 'none');
+
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'finalReveal', finalPlayerIndex, finalPrize });
 }
 
-/* ---------- sfx ---------- */
+/* ---------- sfx mapping ---------- */
 function playWinSfxForPrize(prize){
   const p = (prize || '').toLowerCase();
   if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); return; }
@@ -481,14 +532,73 @@ function playWinSfxForPrize(prize){
   smallAudio.currentTime = 0; smallAudio.play().catch(()=>{});
 }
 
-/* ---------- keyboard bindings ----------
-   1-8 : click/open case 1..8
-   D   : DEAL (only when dealer overlay visible)
-   N   : NO DEAL
-   K   : KEEP
-   S   : SWITCH
---------------------------------------------------------------- */
+/* ---------- remote message handler (slave) ---------- */
+async function handleRemoteMessage(msg){
+  if (!msg || !msg.type) return;
+  switch(msg.type){
+    case 'init':
+      casePrizes = msg.casePrizes ? msg.casePrizes.slice() : casePrizes;
+      break;
+
+    case 'playerPick':
+      playerCaseIndex = msg.index;
+      originalPlayerIndex = msg.index;
+      playerCaseNumberEl.textContent = (playerCaseIndex+1);
+      const pickWrap = document.querySelector(`.case-wrap[data-index='${playerCaseIndex}']`);
+      if (pickWrap) pickWrap.classList.add('case-grey');
+      break;
+
+    case 'reveal':
+      if (msg.casePrizes) casePrizes = msg.casePrizes.slice();
+      await revealCaseWithAnimation(msg.index, { cueWin: false });
+      break;
+
+    case 'dealerOffer':
+      currentOfferText = msg.offer || 'No Offer';
+      offerText.textContent = 'OFFER: ' + currentOfferText;
+      dealerOverlay.classList.remove('hidden');
+      break;
+
+    case 'dealAccepted':
+      dealerOverlay.classList.add('hidden');
+      await revealPlayerCaseForDeal(msg.offer);
+      await sleep(WIN_OVERLAY_DELAY_MS);
+      showWinOverlay(msg.offer);
+      break;
+
+    case 'noDeal':
+      dealerOverlay.classList.add('hidden');
+      break;
+
+    case 'phase4':
+      keepSwitchArea.classList.remove('hidden');
+      break;
+
+    case 'keepChosen':
+    case 'switchChosen':
+      break;
+
+    case 'finalReveal':
+      winText.classList.remove('hidden');
+      winText.textContent = 'YOU WIN: ' + (msg.finalPrize || msg.prize || msg.finalPrize);
+      break;
+
+    case 'showWin':
+      showWinOverlay(msg.prize);
+      break;
+
+    case 'reset':
+      initGame();
+      break;
+
+    default:
+      console.log('unknown remote msg', msg);
+  }
+}
+
+/* ---------- keyboard (master only) ---------- */
 document.addEventListener('keydown', (ev) => {
+  if (IS_SLAVE) return;
   const k = (ev.key || '').toLowerCase();
 
   if (/^[1-8]$/.test(k)){
@@ -502,39 +612,15 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  if (k === 'd'){
-    if (!dealerOverlay.classList.contains('hidden')) {
-      dealBtn.click();
-      ev.preventDefault();
-    }
-    return;
-  }
-  if (k === 'n'){
-    if (!dealerOverlay.classList.contains('hidden')) {
-      noDealBtn.click();
-      ev.preventDefault();
-    }
-    return;
-  }
-
-  if (k === 'k'){
-    if (!keepSwitchArea.classList.contains('hidden')) {
-      keepBtn.click();
-      ev.preventDefault();
-    }
-    return;
-  }
-  if (k === 's'){
-    if (!keepSwitchArea.classList.contains('hidden')) {
-      switchBtn.click();
-      ev.preventDefault();
-    }
-    return;
-  }
+  if (k === 'd'){ if (!dealerOverlay.classList.contains('hidden')) dealBtn.click(); ev.preventDefault(); return; }
+  if (k === 'n'){ if (!dealerOverlay.classList.contains('hidden')) noDealBtn.click(); ev.preventDefault(); return; }
+  if (k === 'k'){ if (!keepSwitchArea.classList.contains('hidden')) keepBtn.click(); ev.preventDefault(); return; }
+  if (k === 's'){ if (!keepSwitchArea.classList.contains('hidden')) switchBtn.click(); ev.preventDefault(); return; }
 });
 
-/* ---------- reset & start ---------- */
-resetBtn.addEventListener('click', () => initGame());
+/* ---------- reset handler ---------- */
+resetBtn.addEventListener('click', () => { initGame(); if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'reset' }); });
 
+/* ---------- start ---------- */
 buildUI();
 initGame();
