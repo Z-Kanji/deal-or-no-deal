@@ -1,10 +1,18 @@
-/* Full game + Ably integration
-   - Place in repo root
-   - Ably key is embedded below (as requested)
-   - Use ?slave=1 in URL for Daktronics display to run in slave/listen mode
+/* Full Deal-style game with Ably master/slave real-time synchronization.
+   Place this file in repo root along with index.html and style.css and assets.
+   Use ?slave=1 in URL for Daktronics display.
 */
 
-/* ---------- CONFIG ---------- */
+/* ---------- CONFIG: sizes & timing ---------- */
+const CASE_WIDTH = 150;
+const CASE_HEIGHT = 120;
+const ANIM_SCALE = 2.0; // scale APNG relative to case size
+const FRAME_RATE = 24;
+const ANIM_DURATION_MS = 1000 + Math.round(2 * (1000 / FRAME_RATE)); // ~1083ms
+const MIN_DEALER_DELAY_MS = 3000; // 3s
+const WIN_OVERLAY_DELAY_MS = 2000;   // 2s
+
+/* ---------- ASSETS ---------- */
 const assets = {
   closedCaseImg: 'closed_briefcase.png',
   animImg: 'case_animation.png',
@@ -17,6 +25,7 @@ const assets = {
   smallPrizeSfx: 'small_prize.mp3'
 };
 
+/* ---------- PRIZES ---------- */
 const prizeListOrdered = [
   ".01",
   "Sticker",
@@ -28,26 +37,8 @@ const prizeListOrdered = [
   "Ninja Creami"
 ];
 
-const allowedOfferPrizes = ["t-shirt","signed poster","luigi","women","womens"]; // lowercase match
-
-const FRAME_RATE = 24;
-const ANIM_DURATION_MS = 1000 + Math.round(2 * (1000 / FRAME_RATE)); // ~1083ms
-const MIN_DEALER_DELAY_MS = 3000;
-const WIN_OVERLAY_DELAY_MS = 2000;
-const CASE_WIDTH = 150;
-const CASE_HEIGHT = 120;
-const ANIM_SCALE = 2.0;
-
-/* ---------- URL params ---------- */
-const urlParams = new URLSearchParams(location.search);
-const IS_SLAVE = urlParams.get('slave') === '1';
-
-/* ---------- ABLY KEY (embedded per request) ---------- */
-/* You provided this key; it's placed here so pages can connect directly.
-   If you'd prefer, you can remove this and pass ?ablyKey=YOURKEY in the URL instead. */
-const EMBEDDED_ABLY_KEY = 'U4A72w.4W1fdQ:oTpv1lav0NvdYwzCYwO5W50FTG6l6N4k5OpKpaaDVyQ';
-const URL_ABLY_KEY = urlParams.get('ablyKey');
-const ABLY_KEY = URL_ABLY_KEY || EMBEDDED_ABLY_KEY;
+// allowed offers (lowercase substrings). We will *prefer* these when offering (excluding highest)
+const allowedOfferPrizes = ["t-shirt","signed poster","luigi","women","womens"];
 
 /* ---------- STATE ---------- */
 let casePrizes = [];
@@ -106,7 +97,18 @@ winWolfie.src = assets.wolfieImg;
 function shuffle(a){ const arr=a.slice(); for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
-/* ---------- ABLY (client-only) ---------- */
+/* ---------- URL params & slave detection ---------- */
+const urlParams = new URLSearchParams(location.search);
+const IS_SLAVE = urlParams.get('slave') === '1';
+const URL_ABLY_KEY = urlParams.get('ablyKey') || null;
+
+/* ---------- ABLY KEY ---------- */
+/* Embedded key (you provided) — kept here because you asked to embed.
+   You may override with ?ablyKey=yourKey in URL. */
+const EMBEDDED_ABLY_KEY = 'U4A72w.4W1fdQ:oTpv1lav0NvdYwzCYwO5W50FTG6l6N4k5OpKpaaDVyQ';
+const ABLY_KEY = URL_ABLY_KEY || EMBEDDED_ABLY_KEY;
+
+/* ---------- ABLY setup (master & slave) ---------- */
 let ably = null;
 let ablyChannel = null;
 function setupAbly(key){
@@ -117,7 +119,7 @@ function setupAbly(key){
     ablyChannel.subscribe((msg) => {
       const m = msg.data;
       if (!m || !m.type) return;
-      // only slaves apply remote messages; if master wants echo handling it can also listen
+      // slave should apply remote messages
       if (IS_SLAVE) handleRemoteMessage(m);
     });
     ably.connection.on('connected', () => console.log('Ably connected'));
@@ -133,6 +135,10 @@ if (ABLY_KEY) setupAbly(ABLY_KEY);
 
 /* ---------- UI BUILD ---------- */
 function buildUI(){
+  // sync CSS variables for size consistency
+  document.documentElement.style.setProperty('--case-width', CASE_WIDTH + 'px');
+  document.documentElement.style.setProperty('--case-height', CASE_HEIGHT + 'px');
+
   prizeLeftEl.innerHTML = '';
   prizeRightEl.innerHTML = '';
   prizeListOrdered.slice(0,4).forEach((p,i)=>{
@@ -165,9 +171,11 @@ function buildUI(){
       if (revealedSet.has(i)) return;
       if (playerCaseIndex !== null && i === playerCaseIndex) return;
       lastRevealClickStart = Date.now();
-      if (ABLY_KEY) ablyPublish({ type:'revealRequest', index:i });
-      await onCaseClicked(i);
+
+      // master publishes reveal intent so slave can play animation at same time
       if (ABLY_KEY) ablyPublish({ type:'reveal', index:i, casePrizes });
+
+      await onCaseClicked(i);
     });
     boardEl.appendChild(wrap);
   }
@@ -238,7 +246,7 @@ function ensureBackgroundStarted(){
   bgAudio.play().catch(()=>{});
 }
 
-/* ---------- click handler ---------- */
+/* ---------- click handler (master) ---------- */
 async function onCaseClicked(index){
   if (overlayVisible) return;
   ensureBackgroundStarted();
@@ -267,11 +275,11 @@ async function onCaseClicked(index){
     overlayVisible = true;
     updateBoardInteractivity();
 
-    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealRequest', index });
-
+    // reveal: slave already got 'reveal' publish (we published before click), but master still runs animation locally
     await revealCaseWithAnimation(index, { cueWin: false });
 
-    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'reveal', index, casePrizes });
+    // publish the reveal for redundancy (casePrizes included)
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealConfirm', index, casePrizes });
 
     picksNeeded--;
     overlayVisible = false;
@@ -297,7 +305,7 @@ async function onCaseClicked(index){
   }
 }
 
-/* ---------- reveal with animation ---------- */
+/* ---------- reveal: play APNG once then open image ---------- */
 let currentOfferText = 'No Offer';
 async function revealCaseWithAnimation(index, options = { cueWin: false }){
   if (revealedSet.has(index)) return;
@@ -309,6 +317,7 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
 
   if (num) num.style.display = 'none';
 
+  // position APNG overlay scaled and centered on the case
   const rect = img.getBoundingClientRect();
   const overlayWidth = Math.round(CASE_WIDTH * ANIM_SCALE);
   const overlayHeight = Math.round(CASE_HEIGHT * ANIM_SCALE);
@@ -321,19 +330,24 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   caseAnimImg.style.top = top + 'px';
   caseAnimImg.style.objectFit = 'contain';
 
+  // restart APNG (cache bust) and show it
   caseAnimImg.src = assets.animImg + '?_=' + Date.now();
   caseAnimImg.classList.remove('hidden');
 
+  // cue win sfx during the animation when requested
   if (options.cueWin){
     const prize = casePrizes[index];
     playWinSfxForPrize(prize);
   }
 
+  // wait exactly animation duration
   await new Promise(res => setTimeout(res, ANIM_DURATION_MS));
 
+  // hide animation and clear src so it won't loop
   caseAnimImg.classList.add('hidden');
   caseAnimImg.src = '';
 
+  // swap to open image and show prize label
   img.style.backgroundImage = `url(${assets.openCaseImg})`;
   wrap.classList.add('case-open');
   img.style.pointerEvents = 'none';
@@ -346,12 +360,14 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   }
   prizeLabel.textContent = casePrizes[index];
 
+  // grey sidebar entry
   const pIdx = prizeListOrdered.findIndex(p => casePrizes[index] === p);
   if (pIdx >= 0){ const li=document.getElementById('prize-'+pIdx); if (li) li.classList.add('greyed'); }
 }
 
-/* ---------- compute dealer offer ---------- */
+/* ---------- dealer offer logic (exclude certain prizes) ---------- */
 function computeDealerOffer(){
+  // gather remaining prizes
   const remaining = [];
   for (let i=0;i<8;i++){
     if (i === playerCaseIndex) continue;
@@ -361,23 +377,38 @@ function computeDealerOffer(){
   remaining.sort((a,b)=>a.idx-b.idx);
   if (remaining.length === 0) return "No Offer";
 
+  // highest is not offered
   const highestIdx = Math.max(...remaining.map(r=>r.idx));
   const nonHighest = remaining.filter(r => r.idx !== highestIdx);
 
+  // second dealer call: offer middle prize (from non-highest if possible)
   if (dealerCallCount === 2){
     const arr = nonHighest.length ? nonHighest : remaining;
     const mid = Math.floor((arr.length - 1) / 2);
     return arr[mid].p;
   }
 
+  // primary: find allowedOfferPrizes excluding highest and also exclude .01/sticker/jbl/ninja
   let candidates = nonHighest.filter(r => {
     const key = r.p.toLowerCase();
+    // exclude explicitly disallowed items
+    if (key.includes('.01') || key.includes('sticker') || key.includes('jbl') || key.includes('ninja')) return false;
     return allowedOfferPrizes.some(a => key.includes(a));
   });
 
   if (candidates.length === 0){
+    // fallback to any non-highest that also don't include disallowed
+    candidates = nonHighest.filter(r => {
+      const key = r.p.toLowerCase();
+      return !(key.includes('.01') || key.includes('sticker') || key.includes('jbl') || key.includes('ninja'));
+    });
+  }
+
+  if (candidates.length === 0){
+    // final fallback: any remaining not highest
     candidates = nonHighest.length ? nonHighest : remaining;
   }
+
   const pick = candidates[Math.floor(Math.random() * candidates.length)];
   return pick ? pick.p : remaining[0].p;
 }
@@ -391,6 +422,7 @@ function showDealerOffer(){
   currentOfferText = offer;
   offerText.textContent = 'OFFER: ' + offer;
 
+  // play SFX when overlay becomes visible
   dealerAudio.currentTime = 0;
   dealerAudio.play().catch(()=>{});
 
@@ -426,9 +458,10 @@ function showDealerOffer(){
   };
 }
 
-/* ---------- reveal player's case for a deal ---------- */
+/* ---------- reveal player's case when deal accepted ---------- */
 async function revealPlayerCaseForDeal(offer){
   if (!revealedSet.has(playerCaseIndex)){
+    // cue win SFX at animation start
     await revealCaseWithAnimation(playerCaseIndex, { cueWin: true });
   }
   playerCaseImgEl.style.backgroundImage = `url(${assets.openCaseImg})`;
@@ -437,8 +470,30 @@ async function revealPlayerCaseForDeal(offer){
   document.querySelectorAll('.case-wrap').forEach(w=> w.style.pointerEvents = 'none');
 }
 
-/* ---------- win overlay ---------- */
+/* ---------- show win overlay ---------- */
 function showWinOverlay(prize){
+  // fade out and stop background music
+  try {
+    const fadeMs = 400;
+    const steps = 8;
+    const stepMs = Math.round(fadeMs / steps);
+    let curStep = 0;
+    const initialVol = bgAudio.volume;
+    const fadeInterval = setInterval(()=>{
+      curStep++;
+      const v = Math.max(0, initialVol * (1 - curStep/steps));
+      bgAudio.volume = v;
+      if (curStep >= steps){
+        clearInterval(fadeInterval);
+        bgAudio.pause();
+        bgAudio.currentTime = 0;
+        bgAudio.volume = initialVol;
+      }
+    }, stepMs);
+  } catch(e){
+    try { bgAudio.pause(); bgAudio.currentTime = 0; } catch(_){}
+  }
+
   winCaseImg.style.backgroundImage = `url(${assets.openCaseImg})`;
   winPrizeText.textContent = prize;
   winOverlay.classList.remove('hidden');
@@ -452,13 +507,7 @@ function showWinOverlay(prize){
   updateBoardInteractivity();
 }
 
-winOkBtn.onclick = () => {
-  winOverlay.classList.add('hidden');
-  overlayVisible = false;
-  updateBoardInteractivity();
-};
-
-/* ---------- keep/switch ---------- */
+/* ---------- keep/switch UI ---------- */
 function showKeepSwitchUI(){
   keepSwitchArea.classList.remove('hidden');
   document.querySelectorAll('.case-wrap').forEach(w => w.style.pointerEvents = 'none');
@@ -549,6 +598,7 @@ async function handleRemoteMessage(msg){
       break;
 
     case 'reveal':
+    case 'revealConfirm':
       if (msg.casePrizes) casePrizes = msg.casePrizes.slice();
       await revealCaseWithAnimation(msg.index, { cueWin: false });
       break;
@@ -576,6 +626,7 @@ async function handleRemoteMessage(msg){
 
     case 'keepChosen':
     case 'switchChosen':
+      // wait for finalReveal event
       break;
 
     case 'finalReveal':
@@ -596,7 +647,7 @@ async function handleRemoteMessage(msg){
   }
 }
 
-/* ---------- keyboard (master only) ---------- */
+/* ---------- keyboard bindings (master only) ---------- */
 document.addEventListener('keydown', (ev) => {
   if (IS_SLAVE) return;
   const k = (ev.key || '').toLowerCase();
@@ -606,6 +657,8 @@ document.addEventListener('keydown', (ev) => {
     const wrap = document.querySelector(`.case-wrap[data-index='${idx}']`);
     if (wrap && !revealedSet.has(idx) && !overlayVisible && !(playerCaseIndex !== null && idx === playerCaseIndex)) {
       lastRevealClickStart = Date.now();
+      // publish reveal so slave plays animation simultaneously
+      if (ABLY_KEY) ablyPublish({ type:'reveal', index: idx, casePrizes });
       onCaseClicked(idx).catch(()=>{});
     }
     ev.preventDefault();
@@ -621,6 +674,6 @@ document.addEventListener('keydown', (ev) => {
 /* ---------- reset handler ---------- */
 resetBtn.addEventListener('click', () => { initGame(); if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'reset' }); });
 
-/* ---------- start ---------- */
+/* ---------- build & start ---------- */
 buildUI();
 initGame();
