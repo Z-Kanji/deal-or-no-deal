@@ -1,15 +1,35 @@
 :root{
   --do-yellow: #f1d27b;
   --do-yellow-border: #c9a64f;
-  --bg: transparent; /* transparent so overlay can sit over video if needed */
+  --bg: #000000;                /* KEEP BACKGROUND BLACK as requested */
 
-  /* Larger case size to suit Daktronics large screens - adjust if you prefer */
+  /* Larger case size to suit Daktronics large screens - adjust if needed */
   --case-width: 200px;
   --case-height: 160px;
+
+  /* UI scale: change this to zoom the entire page.
+     Example: 1.0 = normal size, 0.9 = 90% (zoomed out), 0.8 = 80% */
+  --ui-scale: 0.80;
 }
 
 *{box-sizing:border-box}
 html,body{ height:100%; margin:0; padding:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica, sans-serif; }
+body{ overflow:hidden; } /* prevent Daktronics viewer from adding scrollbars */
+
+/* This wrapper scales the whole game UI down to fit the board.
+   Change --ui-scale in :root to zoom in/out as needed. */
+.scale-wrap{
+  width:100vw;
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  /* scale the internal UI */
+  transform: scale(var(--ui-scale));
+  transform-origin: 50% 0%;
+}
+
+/* main container */
 .game-wrap{
   width: min(1600px, 95vw);
   margin: 0 auto;
@@ -20,6 +40,7 @@ html,body{ height:100%; margin:0; padding:0; background:var(--bg); color:#fff; f
   justify-content:center;
   min-height:100vh;
   box-sizing:border-box;
+  background: transparent;
 }
 
 /* Sidebar prize columns */
