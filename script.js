@@ -1,10 +1,11 @@
 /* Full game rebuilt with:
    - master/slave via Ably
+   - explicit status/title publishes so slave mirrors all visible text changes
    - revealRequest / revealConfirm to prevent premature slave reveals
-   - animation suppressed for picking player's case (no slave animation on pick)
+   - initial pick does NOT animate on slave
    - prize-label wrapping and centering inside open briefcase white box
-   - YOU WIN text now appears below the prize and above OK inside wolfie dialog
-   - prevent double-play of final flourish SFX by short suppression flag
+   - YOU WIN text appears inside wolfie's dialog (below prize)
+   - suppression flag to avoid duplicate flourish SFX
 */
 
 /* ---------- CONFIG: sizes & timing ---------- */
@@ -19,7 +20,7 @@ const WIN_OVERLAY_DELAY_MS = 2000;
 /* ---------- ASSETS ---------- */
 const assets = {
   closedCaseImg: 'closed_briefcase.png',
-  animImg: 'case_animation.png', // APNG
+  animImg: 'case_animation.png',
   openCaseImg: 'open_briefcase.png',
   wolfieImg: 'wolfie_dealer.png',
   bgMusic: 'theme_song.mp3',
@@ -53,8 +54,6 @@ let overlayVisible = false;
 let bgStarted = false;
 let dealerCallCount = 0;
 let lastRevealClickStart = 0;
-
-/* SFX suppression flag to avoid duplicate flourish playback */
 let lastWinSfxPlayed = false;
 
 /* ---------- AUDIO ELEMENTS ---------- */
@@ -227,7 +226,7 @@ function initGame(){
   titleEl.textContent = 'Choose your personal case';
   updateBoardInteractivity();
 
-  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'init', casePrizes });
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'init', casePrizes, title: titleEl.textContent, phase, picksNeeded });
 }
 
 /* ---------- interactivity gating ---------- */
@@ -271,7 +270,7 @@ async function onCaseClicked(index){
     phase = 1; picksNeeded = 3;
     titleEl.textContent = `Phase 1 — Pick ${picksNeeded} case(s) to open`;
     updateBoardInteractivity();
-    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'playerPick', index });
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'playerPick', index, title: titleEl.textContent, phase, picksNeeded });
     return;
   }
 
@@ -295,6 +294,7 @@ async function onCaseClicked(index){
     if (picksNeeded > 0){
       titleEl.textContent = `Pick ${picksNeeded} more case(s)`;
       updateBoardInteractivity();
+      if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'status', title: titleEl.textContent, phase, picksNeeded });
     } else {
       // ensure minimum dealer delay from click to dealer overlay
       const elapsed = Date.now() - lastRevealClickStart;
@@ -304,11 +304,11 @@ async function onCaseClicked(index){
       if (phase === 1 || phase === 2){
         dealerCallCount++;
         showDealerOffer();
-        if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'dealerOffer', offer: currentOfferText, dealerCallCount });
+        if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'dealerOffer', offer: currentOfferText, dealerCallCount, title: titleEl.textContent, phase });
       } else if (phase === 3){
         phase = 4;
         showKeepSwitchUI();
-        if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'phase4' });
+        if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'phase4', title: titleEl.textContent });
       }
     }
   }
@@ -395,14 +395,12 @@ function computeDealerOffer(){
   const highestIdx = Math.max(...remaining.map(r=>r.idx));
   const nonHighest = remaining.filter(r => r.idx !== highestIdx);
 
-  // second dealer call: offer middle prize among remaining (non-highest if possible)
   if (dealerCallCount === 2){
     const arr = nonHighest.length ? nonHighest : remaining;
     const mid = Math.floor((arr.length - 1) / 2);
     return arr[mid].p;
   }
 
-  // primary: pick from allowed list excluding disallowed items (.01, sticker, jbl, ninja)
   let candidates = nonHighest.filter(r => {
     const key = r.p.toLowerCase();
     if (key.includes('.01') || key.includes('sticker') || key.includes('jbl') || key.includes('ninja')) return false;
@@ -435,7 +433,7 @@ function showDealerOffer(){
 
   // play dealer SFX (master) and tell slave to play it
   try { dealerAudio.currentTime = 0; dealerAudio.play().catch(()=>{}); } catch(e){}
-  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'sound', action:'dealerSfx' });
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'dealerOffer', offer, title: titleEl.textContent, phase });
 
   dealerOverlay.classList.remove('hidden');
 
@@ -453,7 +451,6 @@ function showDealerOffer(){
     // reveal player's case for deal — after animation, confirm so slaves show open/prize
     await revealPlayerCaseForDeal(offer);
 
-    // publish revealConfirm for player's case so slaves will mirror (fix for final reveals)
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealConfirm', index: playerCaseIndex, casePrizes });
 
     await sleep(WIN_OVERLAY_DELAY_MS);
@@ -469,13 +466,12 @@ function showDealerOffer(){
     if (phase === 1){ phase = 2; picksNeeded = 2; titleEl.textContent = `Phase 2 — Pick ${picksNeeded} case(s) to open`; }
     else if (phase === 2){ phase = 3; picksNeeded = 1; titleEl.textContent = `Phase 3 — Pick ${picksNeeded} case(s) to open`; }
 
-    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'noDeal', phase, picksNeeded });
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'noDeal', phase, picksNeeded, title: titleEl.textContent });
   };
 }
 
 /* ---------- reveal player's case for DEAL accepted ---------- */
 async function revealPlayerCaseForDeal(offer){
-  // reveal player's case (cue SFX)
   if (!revealedSet.has(playerCaseIndex)){
     await revealCaseWithAnimation(playerCaseIndex, { cueWin: true });
   }
@@ -488,6 +484,9 @@ async function revealPlayerCaseForDeal(offer){
 /* ---------- show keep/switch UI (master) ---------- */
 function showKeepSwitchUI(){
   keepSwitchArea.classList.remove('hidden');
+  titleEl.textContent = 'Phase 4 — Final choice';
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'phase4', title: titleEl.textContent });
+
   document.querySelectorAll('.case-wrap').forEach(w => w.style.pointerEvents = 'none');
 
   keepBtn.onclick = async () => {
@@ -529,10 +528,8 @@ async function finalRevealSequence(switched){
   const otherIndex = (originalPlayerIndex === finalPlayerIndex) ? remainingIndex : originalPlayerIndex;
 
   if (otherIndex !== null && !revealedSet.has(otherIndex)){
-    // publish revealRequest for otherIndex so slave animates it
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealRequest', index: otherIndex, casePrizes });
     await revealCaseWithAnimation(otherIndex);
-    // publish revealConfirm so slaves swap to open case + prize (FIX)
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealConfirm', index: otherIndex, casePrizes });
     await sleep(ANIM_DURATION_MS + 200);
   }
@@ -540,22 +537,21 @@ async function finalRevealSequence(switched){
   if (!revealedSet.has(finalPlayerIndex)){
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealRequest', index: finalPlayerIndex, casePrizes });
     await revealCaseWithAnimation(finalPlayerIndex, { cueWin: true });
-    // publish revealConfirm so slaves swap to open case + prize (FIX)
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealConfirm', index: finalPlayerIndex, casePrizes });
     await sleep(ANIM_DURATION_MS);
   }
 
   const finalPrize = casePrizes[finalPlayerIndex];
+  titleEl.textContent = `YOU WIN: ${finalPrize}`;
   winText.classList.remove('hidden');
   winText.textContent = 'YOU WIN: ' + finalPrize;
   document.querySelectorAll('.case-wrap').forEach(w=> w.style.pointerEvents = 'none');
 
-  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'finalReveal', finalPlayerIndex, finalPrize });
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'finalReveal', finalPlayerIndex, finalPrize, title: titleEl.textContent });
 }
 
 /* ---------- sfx mapping ---------- */
 function playWinSfxForPrize(prize){
-  // plays the appropriate SFX once and sets suppression flag for a short time
   const p = (prize || '').toLowerCase();
   try {
     if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
@@ -572,6 +568,7 @@ async function handleMasterEvent(ev){
   switch(ev.type){
     case 'init':
       casePrizes = ev.casePrizes ? ev.casePrizes.slice() : casePrizes;
+      if (ev.title) titleEl.textContent = ev.title;
       break;
 
     case 'playerPick':
@@ -580,53 +577,68 @@ async function handleMasterEvent(ev){
       playerCaseNumberEl.textContent = (playerCaseIndex+1);
       const pickWrap = document.querySelector(`.case-wrap[data-index='${playerCaseIndex}']`);
       if (pickWrap) pickWrap.classList.add('case-grey');
+      if (ev.title) titleEl.textContent = ev.title;
+      break;
+
+    case 'status':
+      if (ev.title) titleEl.textContent = ev.title;
+      if (typeof ev.phase !== 'undefined') phase = ev.phase;
+      if (typeof ev.picksNeeded !== 'undefined') picksNeeded = ev.picksNeeded;
       break;
 
     case 'revealRequest':
       // play animation on slave but DO NOT show prize label until revealConfirm arrives
+      if (typeof ev.casePrizes !== 'undefined') casePrizes = ev.casePrizes.slice();
       await playAnimationSlave(ev.index);
       break;
 
     case 'revealConfirm':
-      // now slave shows the opened case + prize label and grey sidebar
       if (ev.casePrizes) casePrizes = ev.casePrizes.slice();
       mirrorRevealCase(ev.index, casePrizes[ev.index]);
       break;
 
     case 'prizeGrey':
-      const li = document.getElementById('prize-'+ev.index);
-      if (li) li.classList.add('greyed');
+      {
+        const li = document.getElementById('prize-'+ev.index);
+        if (li) li.classList.add('greyed');
+      }
       break;
 
     case 'dealerOffer':
       currentOfferText = ev.offer || 'No Offer';
       offerText.textContent = 'OFFER: ' + currentOfferText;
+      if (ev.title) titleEl.textContent = ev.title;
       dealerOverlay.classList.remove('hidden');
       try { dealerAudio.currentTime = 0; dealerAudio.play().catch(()=>{}); } catch(e){}
       break;
 
     case 'noDeal':
       dealerOverlay.classList.add('hidden');
+      if (ev.title) titleEl.textContent = ev.title;
       break;
 
     case 'dealAccepted':
       dealerOverlay.classList.add('hidden');
-      await revealCaseOnSlave(ev.playerIndex || playerCaseIndex, ev.offer);
-      // ensure slave also receives revealConfirm if master published it
-      await sleep(WIN_OVERLAY_DELAY_MS);
-      showWinOverlaySlave(ev.offer);
+      if (ev.offer) {
+        // show player's case reveal via APNG then revealConfirm will be sent by master; but master also sends revealConfirm
+        await revealCaseOnSlave(ev.playerIndex || playerCaseIndex, ev.offer);
+        await sleep(WIN_OVERLAY_DELAY_MS);
+        showWinOverlaySlave(ev.offer);
+      }
       break;
 
     case 'phase4':
       keepSwitchArea.classList.remove('hidden');
+      if (ev.title) titleEl.textContent = ev.title;
       break;
 
     case 'finalReveal':
+      if (ev.title) titleEl.textContent = ev.title;
       showWinOverlaySlave(ev.finalPrize || ev.prize);
       break;
 
     case 'showWin':
-      showWinOverlaySlave(ev.prize);
+      if (ev.prize) showWinOverlaySlave(ev.prize);
       break;
 
     case 'sound':
@@ -706,7 +718,6 @@ function showWinOverlaySlave(prize){
   winPrizeText.textContent = prize;
   winOverlay.classList.remove('hidden');
 
-  // play flourish SFX on slave only if we didn't just play one during reveal
   if (!lastWinSfxPlayed){
     const p = (''+prize).toLowerCase();
     try {
@@ -746,7 +757,6 @@ document.addEventListener('keydown', (ev) => {
     const wrap = document.querySelector(`.case-wrap[data-index='${idx}']`);
     if (wrap && !revealedSet.has(idx) && !overlayVisible && !(playerCaseIndex !== null && idx === playerCaseIndex)) {
       lastRevealClickStart = Date.now();
-      // Only publish revealRequest for reveals (phase >=1)
       if (phase >= 1 && ABLY_KEY) ablyPublish({ type:'revealRequest', index: idx, casePrizes });
       onCaseClicked(idx).catch(()=>{});
     }
@@ -776,13 +786,11 @@ function onSwitchClicked(){
 
 /* ---------- master-side showWinOverlay (text-only) ---------- */
 function showWinOverlay(prize){
-  // stop background music gracefully
   stopBackground();
 
   winPrizeText.textContent = prize;
   winOverlay.classList.remove('hidden');
 
-  // play flourish SFX on master only if we didn't just play one during reveal
   if (!lastWinSfxPlayed){
     const p = (''+prize).toLowerCase();
     try {
@@ -794,7 +802,6 @@ function showWinOverlay(prize){
     setTimeout(()=>{ lastWinSfxPlayed = false; }, 3000);
   }
 
-  // publish to slaves that we show the win overlay (so they can mirror)
   if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'showWin', prize });
 }
 
