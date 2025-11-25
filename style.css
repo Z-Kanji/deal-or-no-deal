@@ -15,7 +15,7 @@ body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
 /* Wrapper that allows scaling */
 .game-wrap{
   transform: scale(var(--ui-scale));
-  transform-origin: top left;
+  transform-origin: top center;
   display:flex;
   gap:24px;
   padding:18px;
