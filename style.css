@@ -4,7 +4,7 @@
   --bg: #0b0b0b;
   --case-width: 150px;
   --case-height: 120px;
-  --ui-scale: 0.5; /* default shrink for Daktronics; change to 1 for desktop */
+  --ui-scale: 0.45; /* default shrink for Daktronics; change to 1 for desktop */
 }
 
 /* global */
