@@ -4,7 +4,7 @@
   --bg: #0b0b0b;
   --case-width: 150px;
   --case-height: 120px;
-  --ui-scale: 1; /* change to scale whole UI */
+  --ui-scale: 0.5; /* default shrink for Daktronics; change to 1 for desktop */
 }
 
 /* global */
@@ -12,7 +12,7 @@
 html,body{ height:100%; margin:0; background:var(--bg); color:#fff; font-family: Arial, Helvetica, sans-serif; }
 body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
 
-/* Wrapper allowing global scale */
+/* Wrapper that allows scaling */
 .game-wrap{
   transform: scale(var(--ui-scale));
   transform-origin: top left;
@@ -114,7 +114,7 @@ body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   object-fit:contain;
 }
 
-/* win overlay */
+/* win overlay styling */
 .win-panel{ background:transparent; color:#fff; display:flex; flex-direction:column; align-items:center; gap:12px; }
 .win-title{ font-size:48px; font-weight:900; color:var(--do-yellow); text-shadow: 0 4px 10px rgba(0,0,0,0.6); }
 .win-case .win-case-img{ width:var(--case-width); height:var(--case-height); background-size:cover; background-position:center; border-radius:6px; border:4px solid var(--do-yellow-border); }
