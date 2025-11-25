@@ -65,17 +65,19 @@ body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
 /* prize label inside opened briefcase */
 .prize-label{
   position:absolute;
-  width:84%;
+  width:78%;
   left:50%;
-  top:50%;
+  top:52%;
   transform:translate(-50%,-50%);
   text-align:center;
   font-weight:800;
   color:#111;
-  font-size:14px;
-  padding:6px;
+  font-size:13px;
+  padding:6px 8px;
   pointer-events:none;
-  word-wrap:break-word;
+  white-space:normal;
+  word-break:break-word;
+  line-height:1.08;
 }
 
 /* player area */
@@ -159,16 +161,11 @@ body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
 }
 
 .win-title{
-  font-size:28px;
+  font-size:22px;
   font-weight:900;
   color:var(--do-yellow);
   text-shadow: 0 4px 10px rgba(0,0,0,0.6);
   margin:0;
-}
-
-/* hide the open-case image entirely for the win overlay */
-.win-case .win-case-img{
-  display:none;
 }
 
 /* prize text: sits in wolfie's black dialog */
