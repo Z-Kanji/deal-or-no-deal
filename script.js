@@ -1,21 +1,22 @@
-/* Full Deal-style game with Ably master/slave real-time synchronization.
-   Place this file in repo root along with index.html and style.css and assets.
-   Use ?slave=1 in URL for Daktronics display.
+/* Full game with strict master/slave separation and Ably sync.
+   - Place in repo root along with index.html and style.css and your assets.
+   - Use ?slave=1 in the URL for slave (Daktronics). Master default.
+   - Ably key embedded below (use ?ablyKey=... to override)
 */
 
 /* ---------- CONFIG: sizes & timing ---------- */
 const CASE_WIDTH = 150;
 const CASE_HEIGHT = 120;
-const ANIM_SCALE = 2.0; // scale APNG relative to case size
+const ANIM_SCALE = 1.35;
 const FRAME_RATE = 24;
-const ANIM_DURATION_MS = 1000 + Math.round(2 * (1000 / FRAME_RATE)); // ~1083ms
+const ANIM_DURATION_MS = 1000 + Math.round(.05 * (1000 / FRAME_RATE));
 const MIN_DEALER_DELAY_MS = 3000; // 3s
-const WIN_OVERLAY_DELAY_MS = 2000;   // 2s
+const WIN_OVERLAY_DELAY_MS = 2000; // 2s
 
 /* ---------- ASSETS ---------- */
 const assets = {
   closedCaseImg: 'closed_briefcase.png',
-  animImg: 'case_animation.png',
+  animImg: 'case_animation.png', // APNG
   openCaseImg: 'open_briefcase.png',
   wolfieImg: 'wolfie_dealer.png',
   bgMusic: 'theme_song.mp3',
@@ -37,8 +38,8 @@ const prizeListOrdered = [
   "Ninja Creami"
 ];
 
-// allowed offers (lowercase substrings). We will *prefer* these when offering (excluding highest)
-const allowedOfferPrizes = ["t-shirt","signed poster","luigi","women","womens"];
+/* These strings are used to choose offers (lowercase substrings) */
+const OFFER_ALLOWED = ["t-shirt","signed poster","luigi","women","womens"];
 
 /* ---------- STATE ---------- */
 let casePrizes = [];
@@ -52,12 +53,12 @@ let bgStarted = false;
 let dealerCallCount = 0;
 let lastRevealClickStart = 0;
 
-/* ---------- AUDIO ---------- */
-const bgAudio = new Audio(assets.bgMusic); bgAudio.loop = true; bgAudio.volume = 0.5;
-const dealerAudio = new Audio(assets.dealerCall); dealerAudio.volume = 0.95;
-const biggestAudio = new Audio(assets.biggestPrizeSfx);
-const mediumAudio = new Audio(assets.mediumPrizeSfx);
-const smallAudio = new Audio(assets.smallPrizeSfx);
+/* ---------- AUDIO ELEMENTS ---------- */
+const bgAudio = document.getElementById('bgAudio');
+const dealerAudio = document.getElementById('dealerAudio');
+const biggestAudio = document.getElementById('biggestAudio');
+const mediumAudio = document.getElementById('mediumAudio');
+const smallAudio = document.getElementById('smallAudio');
 
 /* ---------- DOM ---------- */
 const prizeLeftEl = document.getElementById('prizeLeft');
@@ -71,9 +72,12 @@ const titleEl = document.getElementById('title');
 const dealerOverlay = document.getElementById('dealerOverlay');
 const wolfieImgEl = document.getElementById('wolfieImg');
 const offerText = document.getElementById('offerText');
-const dealerButtons = document.getElementById('dealerButtons');
 const dealBtn = document.getElementById('dealBtn');
 const noDealBtn = document.getElementById('noDealBtn');
+
+const keepSwitchArea = document.getElementById('keepSwitchArea');
+const keepBtn = document.getElementById('keepBtn');
+const switchBtn = document.getElementById('switchBtn');
 
 const winOverlay = document.getElementById('winOverlay');
 const winWolfie = document.getElementById('winWolfie');
@@ -81,13 +85,8 @@ const winCaseImg = document.querySelector('#winOverlay .win-case-img');
 const winPrizeText = document.querySelector('#winOverlay .win-prize-text');
 const winOkBtn = document.getElementById('winOkBtn');
 
-const keepSwitchArea = document.getElementById('keepSwitchArea');
-const keepBtn = document.getElementById('keepBtn');
-const switchBtn = document.getElementById('switchBtn');
-
 const winText = document.getElementById('winText');
 const resetBtn = document.getElementById('resetBtn');
-
 const caseAnimImg = document.getElementById('caseAnim');
 
 wolfieImgEl.src = assets.wolfieImg;
@@ -99,16 +98,16 @@ function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
 /* ---------- URL params & slave detection ---------- */
 const urlParams = new URLSearchParams(location.search);
-const IS_SLAVE = urlParams.get('slave') === '1';
+const IS_SLAVE = urlParams.get('slave') === '1' || urlParams.get('mode') === 'slave';
 const URL_ABLY_KEY = urlParams.get('ablyKey') || null;
 
-/* ---------- ABLY KEY ---------- */
-/* Embedded key (you provided) — kept here because you asked to embed.
-   You may override with ?ablyKey=yourKey in URL. */
+/* ---------- ABLY key (embedded) ---------- */
+/* You provided this key earlier; embedded here for convenience.
+   You can override by adding ?ablyKey=YOURKEY to the URL. */
 const EMBEDDED_ABLY_KEY = 'U4A72w.4W1fdQ:oTpv1lav0NvdYwzCYwO5W50FTG6l6N4k5OpKpaaDVyQ';
 const ABLY_KEY = URL_ABLY_KEY || EMBEDDED_ABLY_KEY;
 
-/* ---------- ABLY setup (master & slave) ---------- */
+/* ---------- ABLY setup ---------- */
 let ably = null;
 let ablyChannel = null;
 function setupAbly(key){
@@ -117,28 +116,24 @@ function setupAbly(key){
     ably = new Ably.Realtime(key);
     ablyChannel = ably.channels.get('deal-game-channel');
     ablyChannel.subscribe((msg) => {
-      const m = msg.data;
-      if (!m || !m.type) return;
-      // slave should apply remote messages
-      if (IS_SLAVE) handleRemoteMessage(m);
+      if (!msg || !msg.data) return;
+      // Only slaves handle incoming master events
+      if (IS_SLAVE) handleMasterEvent(msg.data);
     });
     ably.connection.on('connected', () => console.log('Ably connected'));
-  } catch(e){
-    console.warn('Ably init failed', e);
+    ably.connection.on('failed', (err) => console.warn('Ably connection failed', err));
+  } catch (e){
+    console.warn('Ably init error', e);
   }
 }
 function ablyPublish(obj){
   if (!ablyChannel) return;
-  try { ablyChannel.publish('state', obj); } catch(e){ console.warn('Ably publish failed', e); }
+  try { ablyChannel.publish('masterEvent', obj); } catch(e){ console.warn('Ably publish failed', e); }
 }
 if (ABLY_KEY) setupAbly(ABLY_KEY);
 
-/* ---------- UI BUILD ---------- */
+/* ---------- UI BUILD (both master & slave) ---------- */
 function buildUI(){
-  // sync CSS variables for size consistency
-  document.documentElement.style.setProperty('--case-width', CASE_WIDTH + 'px');
-  document.documentElement.style.setProperty('--case-height', CASE_HEIGHT + 'px');
-
   prizeLeftEl.innerHTML = '';
   prizeRightEl.innerHTML = '';
   prizeListOrdered.slice(0,4).forEach((p,i)=>{
@@ -165,39 +160,37 @@ function buildUI(){
 
     wrap.appendChild(img);
     wrap.appendChild(num);
+
+    // only master should react to clicks; slave displays via events
     wrap.addEventListener('click', async () => {
       if (IS_SLAVE) return;
       if (overlayVisible) return;
       if (revealedSet.has(i)) return;
-      if (playerCaseIndex !== null && i === playerCaseIndex) return;
+      if (playerCaseIndex !== null && i === playerCaseIndex) return; // selecting your case is pick, not reveal
       lastRevealClickStart = Date.now();
 
-      // master publishes reveal intent so slave can play animation at same time
-      if (ABLY_KEY) ablyPublish({ type:'reveal', index:i, casePrizes });
+      // Tell slaves we intend to reveal this index (slave will play animation but not reveal player's case prematurely)
+      if (ABLY_KEY) ablyPublish({ type:'revealRequest', index:i, casePrizes });
 
       await onCaseClicked(i);
     });
+
     boardEl.appendChild(wrap);
   }
 
   playerCaseImgEl.style.backgroundImage = `url(${assets.closedCaseImg})`;
   playerCaseNumberEl.textContent = '?';
+
+  // button wiring (master only)
+  dealBtn.onclick = () => { if (IS_SLAVE) return; onDealClicked(); };
+  noDealBtn.onclick = () => { if (IS_SLAVE) return; onNoDealClicked(); };
+  keepBtn.onclick = () => { if (IS_SLAVE) return; onKeepClicked(); };
+  switchBtn.onclick = () => { if (IS_SLAVE) return; onSwitchClicked(); };
+  winOkBtn.onclick = () => { if (IS_SLAVE) return; winOverlay.classList.add('hidden'); };
+  resetBtn.onclick = () => { if (IS_SLAVE) return; initGame(); ablyPublish({ type:'reset' }); };
 }
 
-/* ---------- INTERACTIVITY ---------- */
-function updateBoardInteractivity(){
-  document.querySelectorAll('.case-wrap').forEach((wrap,i)=>{
-    if (IS_SLAVE){ wrap.style.pointerEvents = 'none'; return; }
-    if (overlayVisible){ wrap.style.pointerEvents = 'none'; return; }
-    if (revealedSet.has(i)){ wrap.style.pointerEvents = 'none'; return; }
-    if (phase === 0){ wrap.style.pointerEvents = 'auto'; return; }
-    if (playerCaseIndex !== null && i === playerCaseIndex){ wrap.style.pointerEvents = 'none'; return; }
-    if ((phase >=1 && phase <=3) && !revealedSet.has(i)){ wrap.style.pointerEvents = 'auto'; return; }
-    wrap.style.pointerEvents = 'none';
-  });
-}
-
-/* ---------- GAME INIT ---------- */
+/* ---------- game lifecycle ---------- */
 function initGame(){
   casePrizes = shuffle(prizeListOrdered);
   playerCaseIndex = null;
@@ -233,35 +226,48 @@ function initGame(){
   titleEl.textContent = 'Choose your personal case';
   updateBoardInteractivity();
 
-  if (!IS_SLAVE && ABLY_KEY) {
-    ablyPublish({ type: 'init', casePrizes });
-  }
+  // publish initial state so slaves sync if they connect later
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'init', casePrizes });
 }
 
-/* ---------- BG AUDIO ---------- */
+/* ---------- interactivity gating ---------- */
+function updateBoardInteractivity(){
+  document.querySelectorAll('.case-wrap').forEach((wrap,i)=>{
+    if (IS_SLAVE){ wrap.style.pointerEvents = 'none'; return; }
+    if (overlayVisible){ wrap.style.pointerEvents = 'none'; return; }
+    if (revealedSet.has(i)){ wrap.style.pointerEvents = 'none'; return; }
+    if (phase === 0){ wrap.style.pointerEvents = 'auto'; return; }
+    if (playerCaseIndex !== null && i === playerCaseIndex){ wrap.style.pointerEvents = 'none'; return; }
+    if ((phase >=1 && phase <=3) && !revealedSet.has(i)){ wrap.style.pointerEvents = 'auto'; return; }
+    wrap.style.pointerEvents = 'none';
+  });
+}
+
+/* ---------- background audio control (master publishes to slave) ---------- */
 function ensureBackgroundStarted(){
   if (bgStarted) return;
   bgStarted = true;
-  bgAudio.currentTime = 0;
-  bgAudio.play().catch(()=>{});
+  try { bgAudio.currentTime = 0; bgAudio.play().catch(()=>{}); } catch(e){}
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'sound', action:'bgStart' });
+}
+function stopBackground(){
+  try { bgAudio.pause(); bgAudio.currentTime = 0; } catch(e){}
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'sound', action:'bgStop' });
 }
 
-/* ---------- click handler (master) ---------- */
+/* ---------- master click handlers ---------- */
 async function onCaseClicked(index){
   if (overlayVisible) return;
   ensureBackgroundStarted();
 
-  const wrap = document.querySelector(`.case-wrap[data-index='${index}']`);
-  if (!wrap) return;
-  if (revealedSet.has(index)) return;
-
+  // If player hasn't picked their case yet, this click picks it (phase 0)
   if (phase === 0){
     playerCaseIndex = index;
     originalPlayerIndex = index;
     playerCaseNumberEl.textContent = index+1;
     playerCaseImgEl.style.backgroundImage = `url(${assets.closedCaseImg})`;
-    wrap.classList.add('case-grey');
-    wrap.style.pointerEvents = 'none';
+    const wrap = document.querySelector(`.case-wrap[data-index='${index}']`);
+    if (wrap) wrap.classList.add('case-grey');
     phase = 1; picksNeeded = 3;
     titleEl.textContent = `Phase 1 — Pick ${picksNeeded} case(s) to open`;
     updateBoardInteractivity();
@@ -269,16 +275,18 @@ async function onCaseClicked(index){
     return;
   }
 
+  // From phases 1-3: clicking opens a case (not the player's own)
   if (phase >=1 && phase <=3){
     if (index === playerCaseIndex) return;
-
     overlayVisible = true;
     updateBoardInteractivity();
 
-    // reveal: slave already got 'reveal' publish (we published before click), but master still runs animation locally
+    // publish revealRequest BEFORE playing animation so slave can animate simultaneously
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealRequest', index, casePrizes });
+
     await revealCaseWithAnimation(index, { cueWin: false });
 
-    // publish the reveal for redundancy (casePrizes included)
+    // confirm reveal (include casePrizes for slaves)
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealConfirm', index, casePrizes });
 
     picksNeeded--;
@@ -288,6 +296,7 @@ async function onCaseClicked(index){
       titleEl.textContent = `Pick ${picksNeeded} more case(s)`;
       updateBoardInteractivity();
     } else {
+      // ensure minimum dealer delay from click to dealer overlay
       const elapsed = Date.now() - lastRevealClickStart;
       const remaining = MIN_DEALER_DELAY_MS - elapsed;
       if (remaining > 0) await sleep(remaining);
@@ -305,7 +314,7 @@ async function onCaseClicked(index){
   }
 }
 
-/* ---------- reveal: play APNG once then open image ---------- */
+/* ---------- reveal animation (plays APNG once then swaps to open image) ---------- */
 let currentOfferText = 'No Offer';
 async function revealCaseWithAnimation(index, options = { cueWin: false }){
   if (revealedSet.has(index)) return;
@@ -317,7 +326,7 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
 
   if (num) num.style.display = 'none';
 
-  // position APNG overlay scaled and centered on the case
+  // position and size APNG centered on case
   const rect = img.getBoundingClientRect();
   const overlayWidth = Math.round(CASE_WIDTH * ANIM_SCALE);
   const overlayHeight = Math.round(CASE_HEIGHT * ANIM_SCALE);
@@ -330,28 +339,29 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   caseAnimImg.style.top = top + 'px';
   caseAnimImg.style.objectFit = 'contain';
 
-  // restart APNG (cache bust) and show it
+  // show APNG once (cache-bust)
   caseAnimImg.src = assets.animImg + '?_=' + Date.now();
   caseAnimImg.classList.remove('hidden');
 
-  // cue win sfx during the animation when requested
+  // if cueWin requested, play win SFX now (so it happens during animation)
   if (options.cueWin){
     const prize = casePrizes[index];
     playWinSfxForPrize(prize);
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'sound', action:'winSfx', prize });
   }
 
-  // wait exactly animation duration
-  await new Promise(res => setTimeout(res, ANIM_DURATION_MS));
+  // wait animation duration
+  await sleep(ANIM_DURATION_MS);
 
-  // hide animation and clear src so it won't loop
+  // hide APNG and swap to open image (same size)
   caseAnimImg.classList.add('hidden');
   caseAnimImg.src = '';
 
-  // swap to open image and show prize label
   img.style.backgroundImage = `url(${assets.openCaseImg})`;
   wrap.classList.add('case-open');
   img.style.pointerEvents = 'none';
 
+  // add prize label centered
   let prizeLabel = wrap.querySelector('.prize-label');
   if (!prizeLabel){
     prizeLabel = document.createElement('div');
@@ -360,14 +370,17 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   }
   prizeLabel.textContent = casePrizes[index];
 
-  // grey sidebar entry
+  // grey sidebar entry (master publishes; slave will mirror)
   const pIdx = prizeListOrdered.findIndex(p => casePrizes[index] === p);
-  if (pIdx >= 0){ const li=document.getElementById('prize-'+pIdx); if (li) li.classList.add('greyed'); }
+  if (pIdx >= 0){
+    const li = document.getElementById('prize-'+pIdx);
+    if (li) li.classList.add('greyed');
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'prizeGrey', index: pIdx });
+  }
 }
 
-/* ---------- dealer offer logic (exclude certain prizes) ---------- */
+/* ---------- dealer offer computation (excludes disallowed prizes) ---------- */
 function computeDealerOffer(){
-  // gather remaining prizes
   const remaining = [];
   for (let i=0;i<8;i++){
     if (i === playerCaseIndex) continue;
@@ -377,27 +390,24 @@ function computeDealerOffer(){
   remaining.sort((a,b)=>a.idx-b.idx);
   if (remaining.length === 0) return "No Offer";
 
-  // highest is not offered
   const highestIdx = Math.max(...remaining.map(r=>r.idx));
   const nonHighest = remaining.filter(r => r.idx !== highestIdx);
 
-  // second dealer call: offer middle prize (from non-highest if possible)
+  // second dealer call: offer middle prize among remaining (non-highest if possible)
   if (dealerCallCount === 2){
     const arr = nonHighest.length ? nonHighest : remaining;
     const mid = Math.floor((arr.length - 1) / 2);
     return arr[mid].p;
   }
 
-  // primary: find allowedOfferPrizes excluding highest and also exclude .01/sticker/jbl/ninja
+  // primary: pick from allowed list excluding disallowed items (.01, sticker, jbl, ninja)
   let candidates = nonHighest.filter(r => {
     const key = r.p.toLowerCase();
-    // exclude explicitly disallowed items
     if (key.includes('.01') || key.includes('sticker') || key.includes('jbl') || key.includes('ninja')) return false;
-    return allowedOfferPrizes.some(a => key.includes(a));
+    return OFFER_ALLOWED.some(a => key.includes(a));
   });
 
   if (candidates.length === 0){
-    // fallback to any non-highest that also don't include disallowed
     candidates = nonHighest.filter(r => {
       const key = r.p.toLowerCase();
       return !(key.includes('.01') || key.includes('sticker') || key.includes('jbl') || key.includes('ninja'));
@@ -405,7 +415,6 @@ function computeDealerOffer(){
   }
 
   if (candidates.length === 0){
-    // final fallback: any remaining not highest
     candidates = nonHighest.length ? nonHighest : remaining;
   }
 
@@ -413,7 +422,7 @@ function computeDealerOffer(){
   return pick ? pick.p : remaining[0].p;
 }
 
-/* ---------- show dealer overlay ---------- */
+/* ---------- show dealer overlay (master) ---------- */
 function showDealerOffer(){
   overlayVisible = true;
   updateBoardInteractivity();
@@ -422,15 +431,15 @@ function showDealerOffer(){
   currentOfferText = offer;
   offerText.textContent = 'OFFER: ' + offer;
 
-  // play SFX when overlay becomes visible
-  dealerAudio.currentTime = 0;
-  dealerAudio.play().catch(()=>{});
+  // play dealer SFX (master) and tell slave to play it
+  try { dealerAudio.currentTime = 0; dealerAudio.play().catch(()=>{}); } catch(e){}
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'sound', action:'dealerSfx' });
 
   dealerOverlay.classList.remove('hidden');
-  dealerButtons.classList.remove('hidden');
 
   document.querySelectorAll('.case-wrap').forEach(w => w.style.pointerEvents = 'none');
 
+  // wire buttons (master only)
   dealBtn.onclick = async () => {
     dealerAudio.pause();
     dealerOverlay.classList.add('hidden');
@@ -458,10 +467,10 @@ function showDealerOffer(){
   };
 }
 
-/* ---------- reveal player's case when deal accepted ---------- */
+/* ---------- reveal player's case for DEAL accepted ---------- */
 async function revealPlayerCaseForDeal(offer){
+  // reveal player's case (cue SFX)
   if (!revealedSet.has(playerCaseIndex)){
-    // cue win SFX at animation start
     await revealCaseWithAnimation(playerCaseIndex, { cueWin: true });
   }
   playerCaseImgEl.style.backgroundImage = `url(${assets.openCaseImg})`;
@@ -470,44 +479,7 @@ async function revealPlayerCaseForDeal(offer){
   document.querySelectorAll('.case-wrap').forEach(w=> w.style.pointerEvents = 'none');
 }
 
-/* ---------- show win overlay ---------- */
-function showWinOverlay(prize){
-  // fade out and stop background music
-  try {
-    const fadeMs = 400;
-    const steps = 8;
-    const stepMs = Math.round(fadeMs / steps);
-    let curStep = 0;
-    const initialVol = bgAudio.volume;
-    const fadeInterval = setInterval(()=>{
-      curStep++;
-      const v = Math.max(0, initialVol * (1 - curStep/steps));
-      bgAudio.volume = v;
-      if (curStep >= steps){
-        clearInterval(fadeInterval);
-        bgAudio.pause();
-        bgAudio.currentTime = 0;
-        bgAudio.volume = initialVol;
-      }
-    }, stepMs);
-  } catch(e){
-    try { bgAudio.pause(); bgAudio.currentTime = 0; } catch(_){}
-  }
-
-  winCaseImg.style.backgroundImage = `url(${assets.openCaseImg})`;
-  winPrizeText.textContent = prize;
-  winOverlay.classList.remove('hidden');
-
-  const p = (''+prize).toLowerCase();
-  if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
-  else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
-  else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
-
-  overlayVisible = true;
-  updateBoardInteractivity();
-}
-
-/* ---------- keep/switch UI ---------- */
+/* ---------- show keep/switch UI (master) ---------- */
 function showKeepSwitchUI(){
   keepSwitchArea.classList.remove('hidden');
   document.querySelectorAll('.case-wrap').forEach(w => w.style.pointerEvents = 'none');
@@ -532,12 +504,7 @@ function showKeepSwitchUI(){
   };
 }
 
-function getFinalPrizeForDisplay(){
-  const idx = playerCaseIndex !== null ? playerCaseIndex : originalPlayerIndex;
-  return casePrizes[idx];
-}
-
-/* ---------- final reveal ---------- */
+/* ---------- final reveal sequence (master) ---------- */
 async function finalRevealSequence(switched){
   const remainingUnopened = [...Array(8).keys()].filter(i => i !== originalPlayerIndex && !revealedSet.has(i));
   const remainingIndex = remainingUnopened.length ? remainingUnopened[0] : null;
@@ -556,11 +523,14 @@ async function finalRevealSequence(switched){
   const otherIndex = (originalPlayerIndex === finalPlayerIndex) ? remainingIndex : originalPlayerIndex;
 
   if (otherIndex !== null && !revealedSet.has(otherIndex)){
+    // publish revealRequest for otherIndex so slave animates it
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealRequest', index: otherIndex, casePrizes });
     await revealCaseWithAnimation(otherIndex);
     await sleep(ANIM_DURATION_MS + 200);
   }
 
   if (!revealedSet.has(finalPlayerIndex)){
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealRequest', index: finalPlayerIndex, casePrizes });
     await revealCaseWithAnimation(finalPlayerIndex, { cueWin: true });
     await sleep(ANIM_DURATION_MS);
   }
@@ -576,48 +546,67 @@ async function finalRevealSequence(switched){
 /* ---------- sfx mapping ---------- */
 function playWinSfxForPrize(prize){
   const p = (prize || '').toLowerCase();
-  if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); return; }
-  if (p.includes("women") || p.includes("luigi") || p.includes("signed poster") || p.includes("signed")) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); return; }
-  smallAudio.currentTime = 0; smallAudio.play().catch(()=>{});
+  if (p.includes('jbl') || p.includes('ninja')) { try { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); } catch(e){} return; }
+  if (p.includes("women") || p.includes("luigi") || p.includes("signed poster") || p.includes("signed")) { try { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); } catch(e){} return; }
+  try { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); } catch(e){}
 }
 
-/* ---------- remote message handler (slave) ---------- */
-async function handleRemoteMessage(msg){
-  if (!msg || !msg.type) return;
-  switch(msg.type){
+/* ---------- handle master events on slave (mirror-only) ---------- */
+async function handleMasterEvent(ev){
+  if (!ev || !ev.type) return;
+  switch(ev.type){
     case 'init':
-      casePrizes = msg.casePrizes ? msg.casePrizes.slice() : casePrizes;
+      casePrizes = ev.casePrizes ? ev.casePrizes.slice() : casePrizes;
       break;
 
     case 'playerPick':
-      playerCaseIndex = msg.index;
-      originalPlayerIndex = msg.index;
+      playerCaseIndex = ev.index;
+      originalPlayerIndex = ev.index;
       playerCaseNumberEl.textContent = (playerCaseIndex+1);
+      // visually grey the player's picked case on slave (but DO NOT reveal prize)
       const pickWrap = document.querySelector(`.case-wrap[data-index='${playerCaseIndex}']`);
       if (pickWrap) pickWrap.classList.add('case-grey');
       break;
 
-    case 'reveal':
+    case 'revealRequest':
+      // play animation on slave but DO NOT show prize label until revealConfirm arrives
+      if (ev.index === playerCaseIndex){
+        // if master requested reveal of player's case prematurely, ignore until finalReveal
+        // but animation can still play if master explicitly requests it at final time
+      }
+      await playAnimationSlave(ev.index);
+      break;
+
     case 'revealConfirm':
-      if (msg.casePrizes) casePrizes = msg.casePrizes.slice();
-      await revealCaseWithAnimation(msg.index, { cueWin: false });
+      // now slave shows the opened case + prize label and grey sidebar
+      if (ev.casePrizes) casePrizes = ev.casePrizes.slice();
+      mirrorRevealCase(ev.index, casePrizes[ev.index]);
+      break;
+
+    case 'prizeGrey':
+      // grey a sidebar prize on slave
+      const li = document.getElementById('prize-'+ev.index);
+      if (li) li.classList.add('greyed');
       break;
 
     case 'dealerOffer':
-      currentOfferText = msg.offer || 'No Offer';
+      currentOfferText = ev.offer || 'No Offer';
       offerText.textContent = 'OFFER: ' + currentOfferText;
       dealerOverlay.classList.remove('hidden');
-      break;
-
-    case 'dealAccepted':
-      dealerOverlay.classList.add('hidden');
-      await revealPlayerCaseForDeal(msg.offer);
-      await sleep(WIN_OVERLAY_DELAY_MS);
-      showWinOverlay(msg.offer);
+      // play dealer SFX on slave
+      try { dealerAudio.currentTime = 0; dealerAudio.play().catch(()=>{}); } catch(e){}
       break;
 
     case 'noDeal':
       dealerOverlay.classList.add('hidden');
+      break;
+
+    case 'dealAccepted':
+      dealerOverlay.classList.add('hidden');
+      // reveal player's case visually
+      await revealCaseOnSlave(ev.playerIndex || playerCaseIndex, ev.offer);
+      await sleep(WIN_OVERLAY_DELAY_MS);
+      showWinOverlaySlave(ev.offer);
       break;
 
     case 'phase4':
@@ -626,16 +615,20 @@ async function handleRemoteMessage(msg){
 
     case 'keepChosen':
     case 'switchChosen':
-      // wait for finalReveal event
+      // master will send finalReveal when ready
       break;
 
     case 'finalReveal':
-      winText.classList.remove('hidden');
-      winText.textContent = 'YOU WIN: ' + (msg.finalPrize || msg.prize || msg.finalPrize);
+      // show final YOU WIN overlay on slave (mirror)
+      showWinOverlaySlave(ev.finalPrize || ev.prize);
       break;
 
     case 'showWin':
-      showWinOverlay(msg.prize);
+      showWinOverlaySlave(ev.prize);
+      break;
+
+    case 'sound':
+      handleSoundEvent(ev);
       break;
 
     case 'reset':
@@ -643,8 +636,108 @@ async function handleRemoteMessage(msg){
       break;
 
     default:
-      console.log('unknown remote msg', msg);
+      console.log('unknown master event', ev);
   }
+}
+
+/* ---------- slave helper: play APNG animation without revealing prize ---------- */
+async function playAnimationSlave(index){
+  const wrap = document.querySelector(`.case-wrap[data-index='${index}']`);
+  if (!wrap) return;
+  const img = wrap.querySelector('.case-img');
+  const num = wrap.querySelector('.case-number');
+  if (num) num.style.display = 'none';
+
+  const rect = img.getBoundingClientRect();
+  const overlayWidth = Math.round(CASE_WIDTH * ANIM_SCALE);
+  const overlayHeight = Math.round(CASE_HEIGHT * ANIM_SCALE);
+  const left = rect.left + window.scrollX + Math.round((rect.width - overlayWidth) / 2);
+  const top = rect.top + window.scrollY + Math.round((rect.height - overlayHeight) / 2);
+
+  caseAnimImg.style.width = overlayWidth + 'px';
+  caseAnimImg.style.height = overlayHeight + 'px';
+  caseAnimImg.style.left = left + 'px';
+  caseAnimImg.style.top = top + 'px';
+  caseAnimImg.style.objectFit = 'contain';
+
+  caseAnimImg.src = assets.animImg + '?_=' + Date.now();
+  caseAnimImg.classList.remove('hidden');
+
+  await sleep(ANIM_DURATION_MS);
+
+  caseAnimImg.classList.add('hidden');
+  caseAnimImg.src = '';
+
+  // DO NOT swap to open image or show prize here; wait for revealConfirm
+}
+
+/* ---------- slave helper: show opened case and label when master confirms ---------- */
+function mirrorRevealCase(index, prize){
+  const wrap = document.querySelector(`.case-wrap[data-index='${index}']`);
+  if (!wrap) return;
+  const img = wrap.querySelector('.case-img');
+
+  // swap to open image and show prize label
+  img.style.backgroundImage = `url(${assets.openCaseImg})`;
+  wrap.classList.add('case-open');
+
+  let prizeLabel = wrap.querySelector('.prize-label');
+  if (!prizeLabel){
+    prizeLabel = document.createElement('div');
+    prizeLabel.className = 'prize-label';
+    wrap.appendChild(prizeLabel);
+  }
+  prizeLabel.textContent = prize;
+
+  // grey sidebar entry
+  const pIdx = prizeListOrdered.findIndex(p => prize === p);
+  if (pIdx >= 0){
+    const li = document.getElementById('prize-'+pIdx);
+    if (li) li.classList.add('greyed');
+  }
+}
+
+/* ---------- slave helper: reveal player's case (final) ---------- */
+async function revealCaseOnSlave(index, prize){
+  // play the animation first (if not already played), then show open image & prize
+  await playAnimationSlave(index);
+  mirrorRevealCase(index, prize);
+}
+
+/* ---------- slave helper: show you win overlay ---------- */
+function showWinOverlaySlave(prize){
+  winCaseImg.style.backgroundImage = `url(${assets.openCaseImg})`;
+  winPrizeText.textContent = prize;
+  winOverlay.classList.remove('hidden');
+
+  // play appropriate flourish SFX on slave
+  const p = (''+prize).toLowerCase();
+  try {
+    if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
+    else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
+    else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
+  } catch(e){}
+}
+
+/* ---------- sound events (slave handles) ---------- */
+function handleSoundEvent(ev){
+  if (!ev || !ev.action) return;
+  try {
+    switch(ev.action){
+      case 'bgStart': bgAudio.currentTime = 0; bgAudio.play().catch(()=>{}); break;
+      case 'bgStop': bgAudio.pause(); bgAudio.currentTime = 0; break;
+      case 'dealerSfx': dealerAudio.currentTime = 0; dealerAudio.play().catch(()=>{}); break;
+      case 'winSfx':
+        // choose sfx based on prize if provided
+        const prize = ev.prize || '';
+        const p = (''+prize).toLowerCase();
+        if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
+        else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
+        else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
+        break;
+      default: break;
+    }
+  } catch(e){}
 }
 
 /* ---------- keyboard bindings (master only) ---------- */
@@ -657,8 +750,8 @@ document.addEventListener('keydown', (ev) => {
     const wrap = document.querySelector(`.case-wrap[data-index='${idx}']`);
     if (wrap && !revealedSet.has(idx) && !overlayVisible && !(playerCaseIndex !== null && idx === playerCaseIndex)) {
       lastRevealClickStart = Date.now();
-      // publish reveal so slave plays animation simultaneously
-      if (ABLY_KEY) ablyPublish({ type:'reveal', index: idx, casePrizes });
+      // Tell slaves to animate this reveal now
+      if (ABLY_KEY) ablyPublish({ type:'revealRequest', index: idx, casePrizes });
       onCaseClicked(idx).catch(()=>{});
     }
     ev.preventDefault();
@@ -671,9 +764,25 @@ document.addEventListener('keydown', (ev) => {
   if (k === 's'){ if (!keepSwitchArea.classList.contains('hidden')) switchBtn.click(); ev.preventDefault(); return; }
 });
 
-/* ---------- reset handler ---------- */
-resetBtn.addEventListener('click', () => { initGame(); if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'reset' }); });
+/* ---------- master button actions publish events as needed ---------- */
+function onDealClicked(){
+  // master accepts deal (deal button handler calls this)
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'dealAccepted', offer: currentOfferText, playerIndex: playerCaseIndex });
+  // master will run reveal logic in deal button handler already
+}
+function onNoDealClicked(){
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'noDeal' });
+}
+function onKeepClicked(){
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'keepChosen' });
+}
+function onSwitchClicked(){
+  if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'switchChosen' });
+}
 
-/* ---------- build & start ---------- */
+/* ---------- prize greying from slave or master ---------- */
+// master already greys prizes inside revealCaseWithAnimation; slave mirrors via 'prizeGrey' event
+
+/* ---------- reset & start ---------- */
 buildUI();
 initGame();
