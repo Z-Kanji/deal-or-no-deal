@@ -117,11 +117,12 @@ body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
 
 /* win overlay specific: force content into bottom black dialog area */
 #winOverlay .dealer-box{
-  /* move the container slightly lower to better align with wolfie black dialog
-     and ensure content sits at the bottom of this box (above OK button) */
-  bottom:12%;
-  justify-content:flex-end; /* pushes win-panel to the bottom */
-  padding-bottom:8%;         /* space above OK button */
+  /* Adjusted positioning to fit text snugly in the black dialog box */
+  bottom:14%;
+  height:auto;
+  max-height:35%;
+  padding:0 12px;
+  justify-content:flex-end;
 }
 
 /* offer text: constrained and smaller so it sits inside wolfie's dialog */
@@ -166,35 +167,36 @@ body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   display:flex;
   flex-direction:column;
   align-items:center;
-  gap:8px;
-  max-width:80%;
-  /* Ensure win-panel pushes to bottom of dealer-box when shown */
-  margin-top:auto;
+  gap:6px;
+  max-width:90%;
+  width:100%;
+  padding:0 8px;
 }
 
 /* reduce win-title size slightly to fit inside dialog */
 .win-title{
-  font-size:20px;
+  font-size:18px;
   font-weight:900;
   color:var(--do-yellow);
   text-shadow: 0 4px 10px rgba(0,0,0,0.6);
   margin:0;
+  line-height:1.1;
 }
 
 /* prize text: sits in wolfie's black dialog */
 .win-prize-text{
-  margin-top:0;
+  margin:4px 0 0 0;
   font-weight:900;
   color:var(--do-yellow);
   background:transparent;
-  padding:6px 10px;
+  padding:4px 8px;
   border-radius:4px;
-  font-size:18px;
+  font-size:16px;
   text-align:center;
   max-width:100%;
   word-break:break-word;
-  line-height:1.05;
+  line-height:1.08;
 }
 
 /* ensure OK button stays just below the dialog texts and is visible */
-.win-buttons{ margin-top:8px; display:flex; gap:8px; justify-content:center; }
+.win-buttons{ margin-top:6px; display:flex; gap:8px; justify-content:center; }
