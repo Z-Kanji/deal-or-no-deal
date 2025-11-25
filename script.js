@@ -7,7 +7,7 @@
 /* ---------- CONFIG: sizes & timing ---------- */
 const CASE_WIDTH = 150;
 const CASE_HEIGHT = 120;
-const ANIM_SCALE = 1.35;
+const ANIM_SCALE = 1.05;
 const FRAME_RATE = 24;
 const ANIM_DURATION_MS = 1000 + Math.round(.05 * (1000 / FRAME_RATE));
 const MIN_DEALER_DELAY_MS = 3000; // 3s
