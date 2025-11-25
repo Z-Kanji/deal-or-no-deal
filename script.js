@@ -7,10 +7,10 @@
 /* ---------- CONFIG: sizes & timing ---------- */
 const CASE_WIDTH = 150;
 const CASE_HEIGHT = 120;
-const ANIM_SCALE = 1.05;
+const ANIM_SCALE = 0.85;
 const FRAME_RATE = 24;
 const ANIM_DURATION_MS = 1000 + Math.round(.05 * (1000 / FRAME_RATE));
-const MIN_DEALER_DELAY_MS = 3000; // 3s
+const MIN_DEALER_DELAY_MS = 2500; // 3s
 const WIN_OVERLAY_DELAY_MS = 2000; // 2s
 
 /* ---------- ASSETS ---------- */
@@ -39,7 +39,7 @@ const prizeListOrdered = [
 ];
 
 /* These strings are used to choose offers (lowercase substrings) */
-const OFFER_ALLOWED = ["t-shirt","signed poster","luigi","women","womens"];
+const OFFER_ALLOWED = ["t-shirt","signed poster","luigi","women"];
 
 /* ---------- STATE ---------- */
 let casePrizes = [];
