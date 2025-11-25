@@ -3,13 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Deal-style Game</title>
+  <title>Deal-style Game (Master/Slave)</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Ably client library -->
   <script src="https://cdn.ably.io/lib/ably.min-1.js"></script>
 </head>
 <body>
-  <div class="game-wrap">
+  <div class="game-wrap" id="gameWrap">
     <div class="sidebar left">
       <h3>Prizes</h3>
       <ul id="prizeLeft" class="prize-col"></ul>
@@ -31,8 +30,8 @@
       <div id="keepSwitchArea" class="keep-switch-area hidden">
         <div id="ksInstruction">Final choice — Keep your case or switch with the remaining case?</div>
         <div class="ks-buttons">
-          <button id="keepBtn" class="green">KEEP</button>
-          <button id="switchBtn" class="red">SWITCH</button>
+          <button id="keepBtn" class="green">KEEP (K)</button>
+          <button id="switchBtn" class="red">SWITCH (S)</button>
         </div>
       </div>
 
@@ -49,19 +48,19 @@
     </div>
   </div>
 
-  <!-- Dealer overlay -->
+  <!-- Dealer overlay (wolfie) -->
   <div id="dealerOverlay" class="dealer-overlay hidden" aria-hidden="true">
     <img id="wolfieImg" src="wolfie_dealer.png" alt="Dealer" />
     <div class="dealer-box" role="dialog" aria-modal="true">
       <div id="offerText" class="offer-text">OFFER: --</div>
       <div id="dealerButtons" class="dealer-buttons">
-        <button id="dealBtn" class="deal-btn">DEAL</button>
-        <button id="noDealBtn" class="no-deal-btn">NO DEAL</button>
+        <button id="dealBtn" class="deal-btn">DEAL (D)</button>
+        <button id="noDealBtn" class="no-deal-btn">NO DEAL (N)</button>
       </div>
     </div>
   </div>
 
-  <!-- Win overlay -->
+  <!-- Win overlay (wolfie + case + prize) -->
   <div id="winOverlay" class="dealer-overlay hidden" aria-hidden="true">
     <img id="winWolfie" src="wolfie_dealer.png" alt="Dealer" />
     <div class="dealer-box" role="dialog" aria-modal="true">
@@ -80,6 +79,13 @@
 
   <!-- APNG animation overlay (positioned dynamically) -->
   <img id="caseAnim" class="hidden" alt="Case animation" />
+
+  <!-- audio elements (preload) -->
+  <audio id="bgAudio" src="theme_song.mp3" preload="auto" loop></audio>
+  <audio id="dealerAudio" src="dealer_call.mp3" preload="auto"></audio>
+  <audio id="biggestAudio" src="biggest_prize.mp3" preload="auto"></audio>
+  <audio id="mediumAudio" src="medium_prize.mp3" preload="auto"></audio>
+  <audio id="smallAudio" src="small_prize.mp3" preload="auto"></audio>
 
   <script src="script.js"></script>
 </body>
