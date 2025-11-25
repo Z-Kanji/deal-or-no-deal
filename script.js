@@ -1,10 +1,10 @@
 /* Full game rebuilt with:
    - master/slave via Ably
    - revealRequest / revealConfirm to prevent premature slave reveals
-   - dealer offer box constrained to fit wolfie PNG
-   - YOU WIN overlay uses text inside wolfie's dialog (open-case image removed)
-   - APNG animation preserved (plays once), sizing via ANIM_SCALE
-   - embedded Ably key override via URL param (?ablyKey=)
+   - animation suppressed for picking player's case (no slave animation on pick)
+   - prize-label wrapping and centering inside open briefcase white box
+   - YOU WIN text now appears below the prize and above OK inside wolfie dialog
+   - prevent double-play of final flourish SFX by short suppression flag
 */
 
 /* ---------- CONFIG: sizes & timing ---------- */
@@ -40,8 +40,6 @@ const prizeListOrdered = [
   "JBL Go 4",
   "Ninja Creami"
 ];
-
-/* Offer allowed substrings */
 const OFFER_ALLOWED = ["t-shirt","signed poster","luigi","women"];
 
 /* ---------- STATE ---------- */
@@ -55,6 +53,9 @@ let overlayVisible = false;
 let bgStarted = false;
 let dealerCallCount = 0;
 let lastRevealClickStart = 0;
+
+/* SFX suppression flag to avoid duplicate flourish playback */
+let lastWinSfxPlayed = false;
 
 /* ---------- AUDIO ELEMENTS ---------- */
 const bgAudio = document.getElementById('bgAudio');
@@ -84,7 +85,6 @@ const switchBtn = document.getElementById('switchBtn');
 
 const winOverlay = document.getElementById('winOverlay');
 const winWolfie = document.getElementById('winWolfie');
-const winCaseImg = document.querySelector('#winOverlay .win-case-img');
 const winPrizeText = document.querySelector('#winOverlay .win-prize-text');
 const winOkBtn = document.getElementById('winOkBtn');
 
@@ -169,8 +169,10 @@ function buildUI(){
       if (playerCaseIndex !== null && i === playerCaseIndex) return; // selecting your case is pick, not reveal
       lastRevealClickStart = Date.now();
 
-      // Tell slaves we intend to reveal this index (slave animates)
-      if (ABLY_KEY) ablyPublish({ type:'revealRequest', index:i, casePrizes });
+      // Only publish revealRequest when we are actually revealing (phase 1-3)
+      if (phase >= 1){
+        if (ABLY_KEY) ablyPublish({ type:'revealRequest', index:i, casePrizes });
+      }
 
       await onCaseClicked(i);
     });
@@ -202,6 +204,7 @@ function initGame(){
   bgStarted = false;
   dealerCallCount = 0;
   lastRevealClickStart = 0;
+  lastWinSfxPlayed = false;
 
   document.querySelectorAll('.case-wrap').forEach(wrap=>{
     wrap.classList.remove('case-open','case-grey');
@@ -342,11 +345,15 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   caseAnimImg.src = assets.animImg + '?_=' + Date.now();
   caseAnimImg.classList.remove('hidden');
 
-  // if cueWin requested, play win SFX now (so it happens during animation)
+  // if cueWin requested, play win SFX now (so it happens during animation) and suppress later flourish
   if (options.cueWin){
     const prize = casePrizes[index];
     playWinSfxForPrize(prize);
+    // notify slaves to play win SFX
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'sound', action:'winSfx', prize });
+    // mark that we've just played the win sfx so final overlay doesn't repeat it
+    lastWinSfxPlayed = true;
+    setTimeout(()=>{ lastWinSfxPlayed = false; }, 3000);
   }
 
   // wait animation duration
@@ -360,7 +367,7 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   wrap.classList.add('case-open');
   img.style.pointerEvents = 'none';
 
-  // add prize label centered
+  // add prize label centered (inside white box)
   let prizeLabel = wrap.querySelector('.prize-label');
   if (!prizeLabel){
     prizeLabel = document.createElement('div');
@@ -543,10 +550,15 @@ async function finalRevealSequence(switched){
 
 /* ---------- sfx mapping ---------- */
 function playWinSfxForPrize(prize){
+  // plays the appropriate SFX once and sets suppression flag for a short time
   const p = (prize || '').toLowerCase();
-  if (p.includes('jbl') || p.includes('ninja')) { try { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); } catch(e){} return; }
-  if (p.includes("women") || p.includes("luigi") || p.includes("signed poster") || p.includes("signed")) { try { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); } catch(e){} return; }
-  try { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); } catch(e){}
+  try {
+    if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
+    else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
+    else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
+  } catch(e){}
+  lastWinSfxPlayed = true;
+  setTimeout(()=>{ lastWinSfxPlayed = false; }, 3000);
 }
 
 /* ---------- handle master events on slave (mirror-only) ---------- */
@@ -566,6 +578,7 @@ async function handleMasterEvent(ev){
       break;
 
     case 'revealRequest':
+      // play animation on slave but DO NOT show prize label until revealConfirm arrives
       await playAnimationSlave(ev.index);
       break;
 
@@ -683,18 +696,20 @@ async function revealCaseOnSlave(index, prize){
 
 /* ---------- slave helper: show you win overlay (text only) ---------- */
 function showWinOverlaySlave(prize){
-  // ensure no open-case image used in win overlay
-  if (winCaseImg) { winCaseImg.style.display = 'none'; }
   winPrizeText.textContent = prize;
   winOverlay.classList.remove('hidden');
 
-  // play flourish SFX on slave
-  const p = (''+prize).toLowerCase();
-  try {
-    if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
-    else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
-    else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
-  } catch(e){}
+  // play flourish SFX on slave only if we didn't just play one during reveal
+  if (!lastWinSfxPlayed){
+    const p = (''+prize).toLowerCase();
+    try {
+      if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
+      else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
+      else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
+    } catch(e){}
+    lastWinSfxPlayed = true;
+    setTimeout(()=>{ lastWinSfxPlayed = false; }, 3000);
+  }
 }
 
 /* ---------- sound events (slave handles) ---------- */
@@ -706,11 +721,9 @@ function handleSoundEvent(ev){
       case 'bgStop': bgAudio.pause(); bgAudio.currentTime = 0; break;
       case 'dealerSfx': dealerAudio.currentTime = 0; dealerAudio.play().catch(()=>{}); break;
       case 'winSfx':
+        // choose sfx based on prize (this is the cue played during reveal)
         const prize = ev.prize || '';
-        const p = (''+prize).toLowerCase();
-        if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
-        else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
-        else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
+        playWinSfxForPrize(prize);
         break;
       default: break;
     }
@@ -727,7 +740,8 @@ document.addEventListener('keydown', (ev) => {
     const wrap = document.querySelector(`.case-wrap[data-index='${idx}']`);
     if (wrap && !revealedSet.has(idx) && !overlayVisible && !(playerCaseIndex !== null && idx === playerCaseIndex)) {
       lastRevealClickStart = Date.now();
-      if (ABLY_KEY) ablyPublish({ type:'revealRequest', index: idx, casePrizes });
+      // Only publish revealRequest for reveals (phase >=1)
+      if (phase >= 1 && ABLY_KEY) ablyPublish({ type:'revealRequest', index: idx, casePrizes });
       onCaseClicked(idx).catch(()=>{});
     }
     ev.preventDefault();
@@ -759,19 +773,20 @@ function showWinOverlay(prize){
   // stop background music gracefully
   stopBackground();
 
-  // ensure no open-case image used in win overlay
-  if (winCaseImg) { winCaseImg.style.display = 'none'; }
-
   winPrizeText.textContent = prize;
   winOverlay.classList.remove('hidden');
 
-  // play flourish SFX on master
-  const p = (''+prize).toLowerCase();
-  try {
-    if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
-    else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
-    else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
-  } catch(e){}
+  // play flourish SFX on master only if we didn't just play one during reveal
+  if (!lastWinSfxPlayed){
+    const p = (''+prize).toLowerCase();
+    try {
+      if (p.includes('jbl') || p.includes('ninja')) { biggestAudio.currentTime = 0; biggestAudio.play().catch(()=>{}); }
+      else if (p.includes('luigi') || p.includes('women') || p.includes('signed')) { mediumAudio.currentTime = 0; mediumAudio.play().catch(()=>{}); }
+      else { smallAudio.currentTime = 0; smallAudio.play().catch(()=>{}); }
+    } catch(e){}
+    lastWinSfxPlayed = true;
+    setTimeout(()=>{ lastWinSfxPlayed = false; }, 3000);
+  }
 
   // publish to slaves that we show the win overlay (so they can mirror)
   if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'showWin', prize });
