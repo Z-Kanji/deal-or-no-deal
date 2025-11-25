@@ -169,10 +169,8 @@ function buildUI(){
       if (playerCaseIndex !== null && i === playerCaseIndex) return; // selecting your case is pick, not reveal
       lastRevealClickStart = Date.now();
 
-      // Only publish revealRequest when we are actually revealing (phase 1-3)
-      if (phase >= 1){
-        if (ABLY_KEY) ablyPublish({ type:'revealRequest', index:i, casePrizes });
-      }
+      // Only publish revealRequest when we are actually revealing (phase >= 1)
+      if (phase >= 1 && ABLY_KEY) ablyPublish({ type:'revealRequest', index:i, casePrizes });
 
       await onCaseClicked(i);
     });
@@ -189,7 +187,7 @@ function buildUI(){
   keepBtn.onclick = () => { if (IS_SLAVE) return; onKeepClicked(); };
   switchBtn.onclick = () => { if (IS_SLAVE) return; onSwitchClicked(); };
   winOkBtn.onclick = () => { if (IS_SLAVE) return; winOverlay.classList.add('hidden'); };
-  resetBtn.onclick = () => { if (IS_SLAVE) return; initGame(); ablyPublish({ type:'reset' }); };
+  resetBtn.onclick = () => { if (IS_SLAVE) return; initGame(); if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'reset' }); };
 }
 
 /* ---------- game lifecycle ---------- */
@@ -349,9 +347,7 @@ async function revealCaseWithAnimation(index, options = { cueWin: false }){
   if (options.cueWin){
     const prize = casePrizes[index];
     playWinSfxForPrize(prize);
-    // notify slaves to play win SFX
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'sound', action:'winSfx', prize });
-    // mark that we've just played the win sfx so final overlay doesn't repeat it
     lastWinSfxPlayed = true;
     setTimeout(()=>{ lastWinSfxPlayed = false; }, 3000);
   }
@@ -452,9 +448,13 @@ function showDealerOffer(){
     overlayVisible = false;
     updateBoardInteractivity();
 
-    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'dealAccepted', offer });
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'dealAccepted', offer, playerIndex: playerCaseIndex });
 
+    // reveal player's case for deal — after animation, confirm so slaves show open/prize
     await revealPlayerCaseForDeal(offer);
+
+    // publish revealConfirm for player's case so slaves will mirror (fix for final reveals)
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealConfirm', index: playerCaseIndex, casePrizes });
 
     await sleep(WIN_OVERLAY_DELAY_MS);
     showWinOverlay(offer);
@@ -529,14 +529,19 @@ async function finalRevealSequence(switched){
   const otherIndex = (originalPlayerIndex === finalPlayerIndex) ? remainingIndex : originalPlayerIndex;
 
   if (otherIndex !== null && !revealedSet.has(otherIndex)){
+    // publish revealRequest for otherIndex so slave animates it
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealRequest', index: otherIndex, casePrizes });
     await revealCaseWithAnimation(otherIndex);
+    // publish revealConfirm so slaves swap to open case + prize (FIX)
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealConfirm', index: otherIndex, casePrizes });
     await sleep(ANIM_DURATION_MS + 200);
   }
 
   if (!revealedSet.has(finalPlayerIndex)){
     if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealRequest', index: finalPlayerIndex, casePrizes });
     await revealCaseWithAnimation(finalPlayerIndex, { cueWin: true });
+    // publish revealConfirm so slaves swap to open case + prize (FIX)
+    if (!IS_SLAVE && ABLY_KEY) ablyPublish({ type:'revealConfirm', index: finalPlayerIndex, casePrizes });
     await sleep(ANIM_DURATION_MS);
   }
 
@@ -583,6 +588,7 @@ async function handleMasterEvent(ev){
       break;
 
     case 'revealConfirm':
+      // now slave shows the opened case + prize label and grey sidebar
       if (ev.casePrizes) casePrizes = ev.casePrizes.slice();
       mirrorRevealCase(ev.index, casePrizes[ev.index]);
       break;
@@ -606,6 +612,7 @@ async function handleMasterEvent(ev){
     case 'dealAccepted':
       dealerOverlay.classList.add('hidden');
       await revealCaseOnSlave(ev.playerIndex || playerCaseIndex, ev.offer);
+      // ensure slave also receives revealConfirm if master published it
       await sleep(WIN_OVERLAY_DELAY_MS);
       showWinOverlaySlave(ev.offer);
       break;
@@ -721,7 +728,6 @@ function handleSoundEvent(ev){
       case 'bgStop': bgAudio.pause(); bgAudio.currentTime = 0; break;
       case 'dealerSfx': dealerAudio.currentTime = 0; dealerAudio.play().catch(()=>{}); break;
       case 'winSfx':
-        // choose sfx based on prize (this is the cue played during reveal)
         const prize = ev.prize || '';
         playWinSfxForPrize(prize);
         break;
