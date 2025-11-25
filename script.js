@@ -10,9 +10,9 @@
 /* ---------- CONFIG: sizes & timing ---------- */
 const CASE_WIDTH = 150;
 const CASE_HEIGHT = 120;
-const ANIM_SCALE = 0.85;
+const ANIM_SCALE = 0.65;
 const FRAME_RATE = 24;
-const ANIM_DURATION_MS = 1000 + Math.round(.05 * (1000 / FRAME_RATE));
+const ANIM_DURATION_MS = 1000 + Math.round(.15 * (1000 / FRAME_RATE));
 const MIN_DEALER_DELAY_MS = 2500;
 const WIN_OVERLAY_DELAY_MS = 2000;
 
