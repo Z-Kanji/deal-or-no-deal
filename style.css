@@ -112,6 +112,16 @@ body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   flex-direction:column;
   align-items:center;
   gap:8px;
+  /* default: content stacks from top; for win overlay we force bottom alignment via override below */
+}
+
+/* win overlay specific: force content into bottom black dialog area */
+#winOverlay .dealer-box{
+  /* move the container slightly lower to better align with wolfie black dialog
+     and ensure content sits at the bottom of this box (above OK button) */
+  bottom:12%;
+  justify-content:flex-end; /* pushes win-panel to the bottom */
+  padding-bottom:8%;         /* space above OK button */
 }
 
 /* offer text: constrained and smaller so it sits inside wolfie's dialog */
@@ -158,10 +168,13 @@ body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   align-items:center;
   gap:8px;
   max-width:80%;
+  /* Ensure win-panel pushes to bottom of dealer-box when shown */
+  margin-top:auto;
 }
 
+/* reduce win-title size slightly to fit inside dialog */
 .win-title{
-  font-size:22px;
+  font-size:20px;
   font-weight:900;
   color:var(--do-yellow);
   text-shadow: 0 4px 10px rgba(0,0,0,0.6);
@@ -176,8 +189,12 @@ body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   background:transparent;
   padding:6px 10px;
   border-radius:4px;
-  font-size:20px;
+  font-size:18px;
   text-align:center;
   max-width:100%;
   word-break:break-word;
+  line-height:1.05;
 }
+
+/* ensure OK button stays just below the dialog texts and is visible */
+.win-buttons{ margin-top:8px; display:flex; gap:8px; justify-content:center; }
